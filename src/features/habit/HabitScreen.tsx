@@ -560,7 +560,7 @@ function HabitPanel(props: HabitPanelProps) {
           <div style={{ fontSize: 15, color: '#7ee0a8', lineHeight: 1.6 }}>
             已戒除到 0，恭喜！
             <br />
-            可以定死为 0 或换个新习惯
+            可以换个新习惯，或继续坚持
           </div>
         ) : (
           <>
