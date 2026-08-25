@@ -21,7 +21,7 @@ import type {
 import type { HabitState } from '../engine/types'
 
 export const STORAGE_KEY = 'earthol-hud:data'
-export const CURRENT_VERSION = 1
+export const CURRENT_VERSION = 2
 
 /** 空数据快照（全新安装起点 / 损坏兜底） */
 export function emptyData(): EarthData {
@@ -41,7 +41,23 @@ export function emptyData(): EarthData {
  * 1 为当前版本，暂无历史迁移；未来版本演进时在此登记。
  */
 export const migrations: Record<number, (prev: unknown) => unknown> = {
-  // 1: 初始版本，无迁移
+  // 1→2：工单 03 档案新增正愿景/反愿景/坏习惯描述/完成引导时间
+  1: (prev) => {
+    const d = (prev ?? {}) as Record<string, unknown>
+    const profile = (d.profile ?? null) as Record<string, unknown> | null
+    return {
+      ...d,
+      profile: profile
+        ? {
+            ...profile,
+            vision: profile.vision ?? null,
+            antivision: profile.antivision ?? null,
+            badHabitDesc: profile.badHabitDesc ?? null,
+            onboardedAt: profile.onboardedAt ?? null,
+          }
+        : null,
+    }
+  },
 }
 
 export interface StorageBackend {
@@ -82,13 +98,32 @@ function validateData(value: unknown): EarthData | null {
   if (!Array.isArray(d.savingsAccounts)) return null
   if (!Array.isArray(d.bills)) return null
   return {
-    profile: d.profile as PlayerProfile | null,
+    profile: d.profile ? normalizeProfile(d.profile as Record<string, unknown>) : null,
     habits: d.habits as HabitState[],
     checkins: d.checkins as CheckinRecord[],
     pets: d.pets as Pet[],
     assets: d.assets as Asset[],
     savingsAccounts: d.savingsAccounts as SavingsAccount[],
     bills: d.bills as Bill[],
+  }
+}
+
+/** 档案规范化：缺失字段补默认值，保证读出的 profile 字段齐全 */
+function normalizeProfile(p: Record<string, unknown>): PlayerProfile {
+  return {
+    id: typeof p.id === 'string' ? p.id : crypto.randomUUID(),
+    identityStatement:
+      typeof p.identityStatement === 'string' ? p.identityStatement : null,
+    vision: typeof p.vision === 'string' ? p.vision : null,
+    antivision: typeof p.antivision === 'string' ? p.antivision : null,
+    badHabitDesc: typeof p.badHabitDesc === 'string' ? p.badHabitDesc : null,
+    personaName: typeof p.personaName === 'string' ? p.personaName : null,
+    schedule: p.schedule === 'night' ? 'night' : 'day',
+    onboardedAt: typeof p.onboardedAt === 'string' ? p.onboardedAt : null,
+    createdAt:
+      typeof p.createdAt === 'string'
+        ? p.createdAt
+        : new Date().toISOString(),
   }
 }
 
@@ -149,8 +184,12 @@ export class EarthStorage {
     const profile: PlayerProfile = current ?? {
       id: crypto.randomUUID(),
       identityStatement: null,
+      vision: null,
+      antivision: null,
+      badHabitDesc: null,
       personaName: null,
       schedule: 'day',
+      onboardedAt: null,
       createdAt: new Date().toISOString(),
     }
     const next: PlayerProfile = { ...profile, ...patch }

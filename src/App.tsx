@@ -1,15 +1,28 @@
 /**
- * 应用入口（工单 05）
+ * 应用入口（工单 03 路由化）
  *
- * 主体：HabitScreen（建习惯 → 打卡主界面）。
+ * 按玩家档案状态路由：未完成引导 → OnboardingScreen（角色设定）；
+ * 已完成引导（老用户）→ HabitScreen 主界面。
  * 工单 02 的地基自检面板保留为折叠入口，供排查时间/数据/登录状态。
  */
 import { useState } from 'react'
 import HabitScreen from './features/habit/HabitScreen'
+import OnboardingScreen from './features/onboarding/OnboardingScreen'
+import { isOnboarded } from './features/onboarding/onboardingFlow'
 import FoundationPanel from './FoundationPanel'
+import { earthStorage } from './storage/storage'
 
 function App() {
   const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [onboarded, setOnboarded] = useState(() => isOnboarded(earthStorage.getProfile()))
+
+  if (!onboarded) {
+    return (
+      <OnboardingScreen
+        onCompleted={() => setOnboarded(true)}
+      />
+    )
+  }
 
   return (
     <div style={{ paddingBottom: 24 }}>

@@ -12,10 +12,18 @@ export interface PlayerProfile {
   id: string
   /** 身份宣言「我是___」（一日重启产物，工单 03 写入） */
   identityStatement: string | null
+  /** 正愿景展开描述（身份宣言的补充，可选） */
+  vision: string | null
+  /** 反愿景：「5 年后什么都不改的普通周二」（恐惧驱动，工单 03 写入） */
+  antivision: string | null
+  /** 最想改掉的一个坏习惯 / 想养成的第一个好习惯（MVP 手动描述，为 AI 拆解留位） */
+  badHabitDesc: string | null
   /** 替身人格名字（工单 04 可复用，先留位） */
   personaName: string | null
   /** 作息类型：白天工作 / 夜间工作 */
   schedule: WorkSchedule
+  /** 完成引导的时间（老用户跳过判断依据） */
+  onboardedAt: string | null
   createdAt: string
 }
 

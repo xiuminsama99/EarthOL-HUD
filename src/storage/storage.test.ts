@@ -54,7 +54,7 @@ describe('EarthStorage 数据层', () => {
   it('写入后读取 roundtrip', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
-    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, personaName: null, schedule: 'day', createdAt: '2026-08-25T00:00:00Z' } }))
+    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, personaName: null, schedule: 'day', onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
     const read = s.read()
     expect(read.profile?.id).toBe('p1')
     expect(read.habits).toEqual([])
