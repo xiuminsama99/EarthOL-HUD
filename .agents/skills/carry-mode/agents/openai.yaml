@@ -1,0 +1,5 @@
+interface:
+  display_name: "Carry Mode"
+  short_description: "Auto-carry work to sub-agents"
+policy:
+  allow_implicit_invocation: false

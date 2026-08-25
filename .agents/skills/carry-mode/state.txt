@@ -1,0 +1,5 @@
+lastBuildAt=2026-08-26 00:06:34
+skillCount=26
+skillList=ask-matt,carry-mode,codebase-design,code-review,diagnosing-bugs,domain-modeling,grilling,grill-me,grill-with-docs,handoff,implement,improve-codebase-architecture,prototype,research,resolving-merge-conflicts,setup-matt-pocock-skills,tdd,teach,to-questionnaire,to-spec,to-tickets,triage,wait-what,wayfinder,wizard,writing-for-agents
+skillListChanged=True
+lastInjectedAt=2026-08-26 00:06:43

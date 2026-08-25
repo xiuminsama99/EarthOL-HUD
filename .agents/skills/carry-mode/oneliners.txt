@@ -1,0 +1,27 @@
+# Carry Mode 一句话功能侧车。安装时由 AI 逐技能蒸馏生成，每行一条，技能名与短功能之间用等号分隔。
+ask-matt=推荐适合当前情况的技能或流程
+carry-mode=安装带飞系统并注入项目规则
+code-review=双轴审查某点以来的变更（标准+规格）
+codebase-design=给出深模块设计的共享词汇与改进思路
+diagnosing-bugs=诊断疑难 bug 与性能回归
+domain-modeling=构建打磨项目领域模型
+grill-me=拷问打磨计划或设计
+grill-with-docs=边拷问打磨边产出 ADR 与术语表
+grilling=拷问用户的计划、决定或想法
+handoff=压缩当前对话为交接文档
+implement=按规格或工单实现功能
+improve-codebase-architecture=扫描代码库深化机会并出可视化报告
+prototype=建一次性原型验证设计问题
+research=用一手资料调研并落 Markdown 存档
+resolving-merge-conflicts=解决进行中的 git 合并冲突
+setup-matt-pocock-skills=初始化工程技能套件（tracker/标签/领域文档）
+tdd=测试先行地开发功能或修 bug
+teach=在工区内教用户新技能或概念
+to-questionnaire=把悬而未决的决定转成问卷
+to-spec=把对话合成 spec 发布到工单系统
+to-tickets=把计划拆成带依赖的工单集
+triage=分类验证 issue 与 PR 并写简报
+wait-what=重新表述上一条没送达的消息
+wayfinder=用决策工单地图规划超大型工作
+wizard=生成交互式向导引导人工步骤
+writing-for-agents=按 agent 视角撰写修改文档

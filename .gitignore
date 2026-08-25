@@ -1,0 +1,43 @@
+# ---- Node.js ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+.yarn/
+.pnpm-store/
+
+# ---- Build outputs ----
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# ---- Environment / secrets ----
+.env
+.env.*
+!.env.example
+*.local
+
+# ---- Editor / IDE ----
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS noise ----
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ---- Logs / temp ----
+logs/
+*.log
+tmp/
+temp/
+.cache/
