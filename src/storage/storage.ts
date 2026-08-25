@@ -1,0 +1,251 @@
+/**
+ * localStorage 数据层（地球online玩家控制台，工单 02 本地版）
+ *
+ * 设计：
+ * - 单 key 快照持久化（earthol-hud:data），写入时整体原子替换
+ * - 版本号 + 顺序迁移钩子：读到旧版本数据时逐版升级到当前版本
+ * - 防损坏兜底：JSON 损坏 / 结构非法时返回默认空数据，不抛异常
+ * - 全部写操作收敛到 update()（读-改-写原语），上层派生便捷 CRUD
+ *
+ * BaaS（Supabase）后置时以本层为接口面替换实现。
+ */
+import type {
+  Asset,
+  Bill,
+  CheckinRecord,
+  EarthData,
+  Pet,
+  PlayerProfile,
+  SavingsAccount,
+} from './types'
+import type { HabitState } from '../engine/types'
+
+export const STORAGE_KEY = 'earthol-hud:data'
+export const CURRENT_VERSION = 1
+
+/** 空数据快照（全新安装起点 / 损坏兜底） */
+export function emptyData(): EarthData {
+  return {
+    profile: null,
+    habits: [],
+    checkins: [],
+    pets: [],
+    assets: [],
+    savingsAccounts: [],
+    bills: [],
+  }
+}
+
+/**
+ * 版本迁移钩子：key 为源版本号，value 为升级函数（接收旧数据，返回新数据）。
+ * 1 为当前版本，暂无历史迁移；未来版本演进时在此登记。
+ */
+export const migrations: Record<number, (prev: unknown) => unknown> = {
+  // 1: 初始版本，无迁移
+}
+
+export interface StorageBackend {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
+
+const defaultBackend: StorageBackend = {
+  getItem: (key) => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      // 隐私模式 / 配额超限：静默失败，内存态保持可用
+    }
+  },
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** 校验快照结构；非法返回 null（触发兜底） */
+function validateData(value: unknown): EarthData | null {
+  if (!isRecord(value)) return null
+  const d = value as Partial<EarthData>
+  if (d.profile !== null && !isRecord(d.profile)) return null
+  if (!Array.isArray(d.habits)) return null
+  if (!Array.isArray(d.checkins)) return null
+  if (!Array.isArray(d.pets)) return null
+  if (!Array.isArray(d.assets)) return null
+  if (!Array.isArray(d.savingsAccounts)) return null
+  if (!Array.isArray(d.bills)) return null
+  return {
+    profile: d.profile as PlayerProfile | null,
+    habits: d.habits as HabitState[],
+    checkins: d.checkins as CheckinRecord[],
+    pets: d.pets as Pet[],
+    assets: d.assets as Asset[],
+    savingsAccounts: d.savingsAccounts as SavingsAccount[],
+    bills: d.bills as Bill[],
+  }
+}
+
+export class EarthStorage {
+  private backend: StorageBackend
+
+  constructor(backend: StorageBackend = defaultBackend) {
+    this.backend = backend
+  }
+
+  /** 读快照；损坏自动兜底为空数据 */
+  read(): EarthData {
+    const raw = this.backend.getItem(STORAGE_KEY)
+    if (raw === null) return emptyData()
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return emptyData()
+    }
+    let version = 0
+    let data: unknown = parsed
+    if (isRecord(parsed) && typeof parsed.version === 'number') {
+      version = parsed.version
+      data = parsed.data
+    }
+    // 顺序迁移：旧版本数据逐版升级到当前版本
+    while (version < CURRENT_VERSION) {
+      const migrate = migrations[version]
+      if (migrate) data = migrate(data)
+      version += 1
+    }
+    return validateData(data) ?? emptyData()
+  }
+
+  /** 原子写：mutator 基于当前快照返回新快照后整体替换 */
+  update(mutator: (data: EarthData) => EarthData): EarthData {
+    const next = mutator(this.read())
+    const envelope = JSON.stringify({ version: CURRENT_VERSION, data: next })
+    this.backend.setItem(STORAGE_KEY, envelope)
+    return next
+  }
+
+  /** 清空全部数据 */
+  reset(): void {
+    const envelope = JSON.stringify({ version: CURRENT_VERSION, data: emptyData() })
+    this.backend.setItem(STORAGE_KEY, envelope)
+  }
+
+  // ---- 玩家档案 ----
+  getProfile(): PlayerProfile | null {
+    return this.read().profile
+  }
+
+  /** 创建或补丁玩家档案（首次调用自动生成 id 与默认作息） */
+  updateProfile(patch: Partial<Omit<PlayerProfile, 'id' | 'createdAt'>>): PlayerProfile {
+    const current = this.read().profile
+    const profile: PlayerProfile = current ?? {
+      id: crypto.randomUUID(),
+      identityStatement: null,
+      personaName: null,
+      schedule: 'day',
+      createdAt: new Date().toISOString(),
+    }
+    const next: PlayerProfile = { ...profile, ...patch }
+    this.update((d) => ({ ...d, profile: next }))
+    return next
+  }
+
+  // ---- 习惯 ----
+  getHabit(id: string): HabitState | null {
+    return this.read().habits.find((h) => h.id === id) ?? null
+  }
+
+  listHabits(): HabitState[] {
+    return this.read().habits
+  }
+
+  upsertHabit(habit: HabitState): HabitState {
+    this.update((d) => {
+      const exists = d.habits.some((h) => h.id === habit.id)
+      return {
+        ...d,
+        habits: exists
+          ? d.habits.map((h) => (h.id === habit.id ? habit : h))
+          : [...d.habits, habit],
+      }
+    })
+    return habit
+  }
+
+  removeHabit(id: string): void {
+    this.update((d) => ({ ...d, habits: d.habits.filter((h) => h.id !== id) }))
+  }
+
+  // ---- 打卡记录 ----
+  addCheckin(record: CheckinRecord): CheckinRecord {
+    this.update((d) => ({ ...d, checkins: [...d.checkins, record] }))
+    return record
+  }
+
+  listCheckins(habitId?: string): CheckinRecord[] {
+    const all = this.read().checkins
+    return habitId === undefined ? all : all.filter((c) => c.habitId === habitId)
+  }
+
+  // ---- 宠物 / 资产 / 存钱账户 / 账单 ----
+  listPets(): Pet[] {
+    return this.read().pets
+  }
+
+  upsertPet(pet: Pet): Pet {
+    this.update((d) => {
+      const exists = d.pets.some((p) => p.id === pet.id)
+      return { ...d, pets: exists ? d.pets.map((p) => (p.id === pet.id ? pet : p)) : [...d.pets, pet] }
+    })
+    return pet
+  }
+
+  listAssets(): Asset[] {
+    return this.read().assets
+  }
+
+  upsertAsset(asset: Asset): Asset {
+    this.update((d) => {
+      const exists = d.assets.some((a) => a.id === asset.id)
+      return { ...d, assets: exists ? d.assets.map((a) => (a.id === asset.id ? asset : a)) : [...d.assets, asset] }
+    })
+    return asset
+  }
+
+  listSavingsAccounts(): SavingsAccount[] {
+    return this.read().savingsAccounts
+  }
+
+  upsertSavingsAccount(account: SavingsAccount): SavingsAccount {
+    this.update((d) => {
+      const exists = d.savingsAccounts.some((a) => a.id === account.id)
+      return {
+        ...d,
+        savingsAccounts: exists
+          ? d.savingsAccounts.map((a) => (a.id === account.id ? account : a))
+          : [...d.savingsAccounts, account],
+      }
+    })
+    return account
+  }
+
+  addBill(bill: Bill): Bill {
+    this.update((d) => ({ ...d, bills: [...d.bills, bill] }))
+    return bill
+  }
+
+  listBills(): Bill[] {
+    return this.read().bills
+  }
+}
+
+/** 应用级单例（UI 与后续工单统一入口） */
+export const earthStorage = new EarthStorage()
