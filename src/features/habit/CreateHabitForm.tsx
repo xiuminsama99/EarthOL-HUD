@@ -13,6 +13,10 @@ export interface CreateHabitFormProps {
   /** 当前业务日（作为习惯创建日） */
   businessDate: string
   onSubmit(input: NewHabitInput): { error: string | null }
+  /** B4：引导时写下的坏习惯描述（预填名称，来源标注） */
+  initialName?: string
+  /** B4：预选方向（坏习惯预选「戒除」） */
+  initialDirection?: HabitDirection
 }
 
 const DIRECTION_OPTIONS: { value: HabitDirection; label: string; hint: string }[] = [
@@ -39,8 +43,8 @@ const inputStyle: React.CSSProperties = {
 }
 
 export function CreateHabitForm(props: CreateHabitFormProps) {
-  const [name, setName] = useState('')
-  const [direction, setDirection] = useState<HabitDirection>('positive')
+  const [name, setName] = useState(props.initialName ?? '')
+  const [direction, setDirection] = useState<HabitDirection>(props.initialDirection ?? 'positive')
   const [baseAmount, setBaseAmount] = useState('1')
   const [cap, setCap] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -107,6 +111,11 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
           placeholder="如：每天读一页书 / 每天少吃一口"
           maxLength={40}
         />
+        {props.initialName && (
+          <span style={{ fontSize: 11, color: '#d9b64a', marginTop: 4 }}>
+            来自你的引导记录：{props.initialName}
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>

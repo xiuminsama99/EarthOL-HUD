@@ -124,11 +124,21 @@ describe('规则 5：超额 → 警告 + 超额量累计为假期币', () => {
     expect(r.status).toBe('checked-in')
     expect(r.targetAmount).toBe(3)
     expect(r.overAmount).toBe(5)
-    expect(r.vacationCoinsDelta).toBe(5)
-    expect(r.habit.vacationCoins).toBe(5)
+    // B3：入币上限 = 当日目标量 → 超额 5 中只转 3 币
+    expect(r.vacationCoinsDelta).toBe(3)
+    expect(r.habit.vacationCoins).toBe(3)
     expect(r.warning).toEqual({ kind: 'overachievement', message: '不建议，离目标更远' })
     expect(r.habit.totalAmount).toBe(8)
     expect(r.habit.consistencyDays).toBe(0) // 突击不涨养成值
+  })
+
+  it('B3：超额量超过当日目标 2 倍以上，入币仍不超过目标量（防刷币）', () => {
+    const h = habit({ progressStep: 2 }) // 目标 3
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 100, note: '疯狂超额' })
+    expect(r.status).toBe('checked-in')
+    expect(r.overAmount).toBe(97) // 警告仍显示真实超额量
+    expect(r.vacationCoinsDelta).toBe(3) // 币上限 = 目标 3
+    expect(r.habit.vacationCoins).toBe(3)
   })
 
   it('恰好达标：无超额、无警告、不产币', () => {
@@ -417,6 +427,32 @@ describe('规则 10：作息类型影响「今天」边界', () => {
     const morning = checkIn({ habit: r.habit, now: new Date(2026, 0, 13, 8, 0), schedule: 'night', amount: getDailyTarget(r.habit, '2026-01-13'), note: '早上补今天的' })
     expect(morning.status).toBe('checked-in')
     expect(morning.habit.lastCheckinDate).toBe('2026-01-13')
+  })
+})
+
+// B2：固定业务时区，与设备时区无关（防改设备时区作弊）
+describe('B2：业务日固定按业务时区计算', () => {
+  it('同一网络时刻（UTC 构造）不同业务时区 → 各按其时区得到正确业务日', () => {
+    // 2026-01-12T16:30Z = Asia/Shanghai 01-13 00:30 / Asia/Tokyo 01-13 01:30 / UTC 01-12 16:30
+    const instant = new Date('2026-01-12T16:30:00Z')
+    expect(resolveBusinessDate(instant, 'day', 'Asia/Shanghai')).toBe('2026-01-13')
+    expect(resolveBusinessDate(instant, 'night', 'Asia/Shanghai')).toBe('2026-01-12')
+    expect(resolveBusinessDate(instant, 'day', 'Asia/Tokyo')).toBe('2026-01-13')
+    expect(resolveBusinessDate(instant, 'day', 'UTC')).toBe('2026-01-12')
+  })
+
+  it('默认业务时区 Asia/Shanghai：夜间边界（凌晨 0-4:59 归昨日）按业务时区小时判定', () => {
+    // 01-12T16:00Z = Shanghai 01-13 00:00 → 夜间归昨日 01-12
+    expect(resolveBusinessDate(new Date('2026-01-12T16:00:00Z'), 'night')).toBe('2026-01-12')
+    // 01-12T21:00Z = Shanghai 01-13 05:00 → 归属当日 01-13
+    expect(resolveBusinessDate(new Date('2026-01-12T21:00:00Z'), 'night')).toBe('2026-01-13')
+  })
+
+  it('业务日计算与设备本地时区无关：同一 Date 对象任何设备时区结果相同', () => {
+    // Date 由 UTC 字符串构造，其绝对时刻固定；resolveBusinessDate 只用 timeZone 参数
+    const instant = new Date('2026-01-13T00:00:00Z')
+    expect(resolveBusinessDate(instant, 'day')).toBe('2026-01-13')
+    expect(resolveBusinessDate(instant, 'night')).toBe('2026-01-13')
   })
 })
 

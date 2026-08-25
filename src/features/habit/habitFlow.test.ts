@@ -15,6 +15,8 @@ import {
   planToday,
   setCap,
   buildOverachievementNotice,
+  deleteHabit,
+  renameHabit,
   type CheckinOutcome,
   type HabitDeps,
 } from './habitFlow'
@@ -259,7 +261,7 @@ describe('打卡流程', () => {
     expect(storage.listCheckins().length).toBe(0)
   })
 
-  it('超额打卡：产生「不建议」警告、超额量入假期币、养成值不涨', () => {
+  it('超额打卡：产生「不建议」警告、超额入币（上限=目标量）、养成值不涨', () => {
     const { deps, storage } = makeDeps()
     const { habit } = createHabit(deps, {
       name: '阅读',
@@ -274,9 +276,10 @@ describe('打卡流程', () => {
     })
     expect(outcome.result.status).toBe('checked-in')
     expect(outcome.result.warning?.kind).toBe('overachievement')
-    expect(outcome.result.overAmount).toBe(7)
+    expect(outcome.result.overAmount).toBe(7) // 警告仍显示真实超额量
     const saved = readHabit(storage)
-    expect(saved.vacationCoins).toBe(7)
+    // B3：入币上限 = 当日目标量 1 → 超额 7 中只转 1 币
+    expect(saved.vacationCoins).toBe(1)
     expect(saved.consistencyDays).toBe(0) // 超额不涨养成值
     expect(saved.totalAmount).toBe(8) // 但总量计入
   })
@@ -460,11 +463,12 @@ describe('锁死 / 可调上限（动态调节条）', () => {
   })
 })
 
-describe('A5：超额提示文案（habitFlow 层统一构建）', () => {
-  it('明确告知超额不计入养成线、连续养成已重新计数', () => {
-    const notice = buildOverachievementNotice(5, 3)
+describe('A5/B3：超额提示文案（habitFlow 层统一构建）', () => {
+  it('明确告知超额入币上限、不计入养成线、连续养成已重新计数', () => {
+    // 超额 5、其中 3 转为假期币、当前共 3 枚（B3 口径：入币上限=当日目标量）
+    const notice = buildOverachievementNotice(5, 3, 3)
     expect(notice).toContain('不建议')
-    expect(notice).toContain('超额 5 已转为假期币（当前 3 枚）')
+    expect(notice).toContain('超额 5 中 3 已存为假期币（当前 3 枚）')
     expect(notice).toContain('不计入养成线')
     expect(notice).toContain('重新计数')
   })
@@ -604,5 +608,115 @@ describe('一键打卡（工单 06）', () => {
     expect(outcome.result.status).toBe('checked-in')
     expect(outcome.result.warning).toBeUndefined()
     expect(outcome.record!.amount).toBe(9)
+  })
+})
+
+describe('B1：作息切换当天禁止再次打卡（防刷卡）', () => {
+  it('当日已切换作息 → 打卡被拒（schedule-switched-today），不落库', () => {
+    const { deps, storage } = makeDeps()
+    storage.updateProfile({ lastScheduleSwitchAt: '2026-01-13T09:00:00+08:00' })
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
+    expect(outcome.result.status).toBe('rejected')
+    expect(outcome.result.reason).toBe('schedule-switched-today')
+    expect(outcome.record).toBeNull()
+    expect(storage.listCheckins().length).toBe(0)
+    expect(readHabit(storage).progressStep).toBe(0)
+  })
+
+  it('未切换作息：正常打卡不受影响', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(storage.listCheckins().length).toBe(1)
+  })
+
+  it('次日可正常打卡（切换发生在昨天不拦截）', () => {
+    const { deps, storage } = makeDeps()
+    storage.updateProfile({ lastScheduleSwitchAt: '2026-01-12T23:00:00+08:00' })
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(storage.listCheckins().length).toBe(1)
+  })
+})
+
+describe('B6：习惯删除与改名', () => {
+  it('删除：仅删习惯，关联打卡记录保留，列表为空', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    void performCheckin(deps, habit!, NOW, 'day', { amount: 1, note: '第一天' })
+    expect(storage.listCheckins(habit!.id).length).toBe(1)
+    const r = deleteHabit(deps, habit!.id)
+    expect(r.ok).toBe(true)
+    expect(storage.listHabits().length).toBe(0)
+    expect(storage.listCheckins(habit!.id).length).toBe(1) // 记录保留
+  })
+
+  it('删除不存在的习惯：报错且不影响其他数据', () => {
+    const { deps } = makeDeps()
+    const r = deleteHabit(deps, 'nope')
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('不存在')
+  })
+
+  it('改名：仅改名称字段，其余状态原样保留', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 3,
+      cap: 8,
+      createdAt: BUSINESS_DATE,
+    })
+    void performCheckin(deps, habit!, NOW, 'day', { amount: 3, note: '达标' })
+    const r = renameHabit(deps, habit!.id, '每天读两页书')
+    expect(r.error).toBeNull()
+    const saved = readHabit(storage)
+    expect(saved.name).toBe('每天读两页书')
+    expect(saved.baseAmount).toBe(3)
+    expect(saved.cap).toBe(8)
+    expect(saved.progressStep).toBe(0) // 创建即锁死：进度不推进（引擎规则 3）
+    expect(saved.totalAmount).toBe(3) // 打卡总量保留
+  })
+
+  it('改名校验：空名 / 超长 / 不存在均拒绝', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    expect(renameHabit(deps, habit!.id, '   ').error).toContain('名称')
+    expect(renameHabit(deps, habit!.id, 'x'.repeat(41)).error).toContain('最长')
+    expect(renameHabit(deps, 'nope', '合法').error).toContain('不存在')
+    expect(readHabit(storage).name).toBe('阅读') // 全部失败不落库
   })
 })

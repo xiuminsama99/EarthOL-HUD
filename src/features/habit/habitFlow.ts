@@ -16,13 +16,18 @@ import type {
   WorkSchedule,
 } from '../../engine/types'
 import type { EarthStorage } from '../../storage/storage'
-import type { CheckinRecord } from '../../storage/types'
+import type { CheckinRecord, PlayerProfile } from '../../storage/types'
 
 /** 流程依赖：本模块只用到数据层的这些能力 */
 export interface HabitDeps {
   storage: Pick<
     EarthStorage,
-    'getHabit' | 'upsertHabit' | 'addCheckin' | 'listCheckins' | 'getProfile'
+    | 'getHabit'
+    | 'upsertHabit'
+    | 'addCheckin'
+    | 'listCheckins'
+    | 'getProfile'
+    | 'removeHabit'
   >
 }
 
@@ -130,6 +135,22 @@ export interface CheckinOutcome {
   record: CheckinRecord | null
 }
 
+/** 同一设备自然日判定（B1 防刷卡用；防御逻辑以设备时钟粗判） */
+function sameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+/** B1：当日已切换作息类型（设备自然日与 now 相同）→ 禁止再次打卡 */
+function switchedScheduleToday(profile: PlayerProfile | null, now: Date): boolean {
+  if (profile === null || profile.lastScheduleSwitchAt === null) return false
+  const switched = new Date(profile.lastScheduleSwitchAt)
+  return !Number.isNaN(switched.getTime()) && sameLocalDay(switched, now)
+}
+
 /** 打卡：引擎判定 + 结果持久化（习惯状态 + 打卡记录） */
 export function performCheckin(
   deps: HabitDeps,
@@ -138,7 +159,25 @@ export function performCheckin(
   schedule: WorkSchedule,
   action: CheckinAction,
 ): CheckinOutcome {
-  const identity = deps.storage.getProfile()?.identityStatement ?? null
+  const profile = deps.storage.getProfile()
+  const identity = profile?.identityStatement ?? null
+
+  // B1 前置校验：当日已切换作息 → 拒绝（防"切昼夜刷卡"多打一天）
+  if (switchedScheduleToday(profile, now)) {
+    const rejected: CheckinResult = {
+      status: 'rejected',
+      reason: 'schedule-switched-today',
+      note: '',
+      habit,
+      targetAmount: 0,
+      completedAmount: 0,
+      overAmount: 0,
+      vacationCoinsDelta: 0,
+      formed: habit.isFormed,
+    }
+    return { result: rejected, record: null }
+  }
+
   const input: CheckinInput = {
     habit,
     now,
@@ -168,9 +207,16 @@ export function performCheckin(
   return { result, record }
 }
 
-/** 超额反馈提示（A5：明确告知养成线中断，UI 复用同一文案） */
-export function buildOverachievementNotice(overAmount: number, vacationCoins: number): string {
-  return `不建议，离目标更远，超额 ${overAmount} 已转为假期币（当前 ${vacationCoins} 枚）。超额当天不计入养成线，连续养成已重新计数`
+/**
+ * 超额反馈提示（A5 明确养成线中断 + B3 文案区分"存入的币"与"真实超额量"）。
+ * 超额产生的币上限 = 当日目标量，因此超额量中只有部分转为假期币。
+ */
+export function buildOverachievementNotice(
+  overAmount: number,
+  coinsGained: number,
+  vacationCoins: number,
+): string {
+  return `不建议，离目标更远，超额 ${overAmount} 中 ${coinsGained} 已存为假期币（当前 ${vacationCoins} 枚）。超额当天不计入养成线，连续养成已重新计数`
 }
 
 /** 锁死：定死自认上限（动态调节条落地动作） */
@@ -208,4 +254,28 @@ export function setCap(
   const locked = lockCap(habit, cap)
   deps.storage.upsertHabit(locked)
   return { habit: locked, error: null }
+}
+
+/** 删除习惯（B6）：仅删习惯本身，关联打卡记录保留（统计口径不变） */
+export function deleteHabit(deps: HabitDeps, habitId: string): { ok: boolean; error: string | null } {
+  const existing = deps.storage.getHabit(habitId)
+  if (!existing) return { ok: false, error: '习惯不存在' }
+  deps.storage.removeHabit(habitId)
+  return { ok: true, error: null }
+}
+
+/** 改名（B6）：仅改 name 字段，引擎规则不读名称 */
+export function renameHabit(
+  deps: HabitDeps,
+  habitId: string,
+  newName: string,
+): { habit: HabitState | null; error: string | null } {
+  const name = newName.trim()
+  if (name.length === 0) return { habit: null, error: '习惯名称不能为空' }
+  if (name.length > 40) return { habit: null, error: '习惯名称最长 40 字' }
+  const existing = deps.storage.getHabit(habitId)
+  if (!existing) return { habit: null, error: '习惯不存在' }
+  const renamed: HabitState = { ...existing, name }
+  deps.storage.upsertHabit(renamed)
+  return { habit: renamed, error: null }
 }

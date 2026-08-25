@@ -55,7 +55,7 @@ describe('EarthStorage 数据层', () => {
   it('写入后读取 roundtrip', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
-    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, personaName: null, schedule: 'day', onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
+    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
     const read = s.read()
     expect(read.profile?.id).toBe('p1')
     expect(read.habits).toEqual([])
@@ -190,5 +190,70 @@ describe('EarthStorage 数据层', () => {
     )
     const s = new EarthStorage(backend)
     expect(s.listHabits()[0]?.actionCount).toBe(7)
+  })
+
+  it('B1：旧档案缺 lastScheduleSwitchAt 时读回 null（旧 localStorage 数据可用）', () => {
+    const { backend, store } = makeBackend()
+    const legacyProfile = {
+      id: 'p1',
+      identityStatement: '我是健康的人',
+      vision: null,
+      antivision: null,
+      badHabitDesc: null,
+      personaName: null,
+      schedule: 'day',
+      onboardedAt: '2026-08-25T00:00:00Z',
+      createdAt: '2026-08-25T00:00:00Z',
+    }
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: legacyProfile,
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.getProfile()?.lastScheduleSwitchAt).toBeNull()
+    expect(s.getProfile()?.identityStatement).toBe('我是健康的人') // 其余字段原样保留
+  })
+
+  it('B1：已含 lastScheduleSwitchAt 的档案原样读回', () => {
+    const { backend, store } = makeBackend()
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: {
+            id: 'p1',
+            identityStatement: null,
+            vision: null,
+            antivision: null,
+            badHabitDesc: null,
+            personaName: null,
+            schedule: 'night',
+            lastScheduleSwitchAt: '2026-08-25T12:00:00+08:00',
+            onboardedAt: null,
+            createdAt: '2026-08-25T00:00:00Z',
+          },
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.getProfile()?.lastScheduleSwitchAt).toBe('2026-08-25T12:00:00+08:00')
   })
 })

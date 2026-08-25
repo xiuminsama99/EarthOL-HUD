@@ -30,13 +30,6 @@ const DAY_MS = 86_400_000
 /** 超额警告文案（产品口径：不建议，离目标更远） */
 const OVERACHIEVEMENT_MESSAGE = '不建议，离目标更远'
 
-function toDateKey(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 /** 两个 YYYY-MM-DD 业务日之间的日历日差（b - a） */
 function daysBetween(a: string, b: string): number {
   const [ay, am, ad] = a.split('-').map(Number)
@@ -49,15 +42,46 @@ function daysBetween(a: string, b: string): number {
 /**
  * 规则 10：作息类型决定「今天」的业务日边界。
  * 注入 now + 作息类型 → 返回业务日 YYYY-MM-DD。
+ *
+ * B2（防改设备时区作弊）：业务日固定按业务时区（默认 Asia/Shanghai）计算，
+ * 由注入的 timeZone 决定，与设备本地时区/时钟无关。改设备时区无法改变业务日归属。
  */
-export function resolveBusinessDate(now: Date, schedule: WorkSchedule): string {
-  if (schedule === 'day') return toDateKey(now)
-  if (now.getHours() < NIGHT_DAY_START_HOUR) {
-    const yesterday = new Date(now)
-    yesterday.setDate(now.getDate() - 1)
-    return toDateKey(yesterday)
+export const BUSINESS_TIME_ZONE = 'Asia/Shanghai'
+
+/** 按业务时区拆出日期与小时（hourCycle h23：午夜为 0，避免 24） */
+function businessParts(now: Date, timeZone: string): { dateKey: string; hour: number } {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = fmt.formatToParts(now)
+  const get = (t: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((p) => p.type === t)?.value ?? ''
+  return {
+    dateKey: `${get('year')}-${get('month')}-${get('day')}`,
+    hour: Number(get('hour')) || 0,
   }
-  return toDateKey(now)
+}
+
+/** 业务日字符串加减 N 天（按业务时区，与设备时区无关） */
+function dayKeyWithDelta(dateKey: string, delta: number, timeZone: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  return businessParts(new Date(Date.UTC(y, m - 1, d + delta, 12)), timeZone).dateKey
+}
+
+export function resolveBusinessDate(
+  now: Date,
+  schedule: WorkSchedule,
+  timeZone: string = BUSINESS_TIME_ZONE,
+): string {
+  const { dateKey, hour } = businessParts(now, timeZone)
+  if (schedule === 'day') return dateKey
+  if (hour < NIGHT_DAY_START_HOUR) return dayKeyWithDelta(dateKey, -1, timeZone)
+  return dateKey
 }
 
 /**
@@ -204,7 +228,10 @@ export function checkIn(input: CheckinInput): CheckinResult {
 
   const totalAmount = habit.totalAmount + amount
   const overAmount = amount > targetAmount ? amount - targetAmount : 0
-  const vacationCoins = habit.vacationCoins + overAmount
+  // B3：超额产生假期币上限 = 当日目标量（超额量"存储"为休息额度，防故意刷币）；
+  // 超额警告仍显示真实超额量
+  const vacationCoinsGain = Math.min(overAmount, targetAmount)
+  const vacationCoins = habit.vacationCoins + vacationCoinsGain
 
   // 真实打卡成功次数（锁死 / 缺勤回退不影响；打卡语「第 N 次」用它）
   const actionCount = habit.actionCount + 1
@@ -245,7 +272,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     completedAmount: amount,
     warning,
     overAmount,
-    vacationCoinsDelta: overAmount,
+    vacationCoinsDelta: vacationCoinsGain,
     formed: isFormed,
   }
 }

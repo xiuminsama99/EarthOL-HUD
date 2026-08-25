@@ -22,6 +22,8 @@ export interface PlayerProfile {
   personaName: string | null
   /** 作息类型：白天工作 / 夜间工作 */
   schedule: WorkSchedule
+  /** 最近一次切换作息类型的时刻（设备 ISO；B1 防刷卡：切换当天禁止再次打卡） */
+  lastScheduleSwitchAt: string | null
   /** 完成引导的时间（老用户跳过判断依据） */
   onboardedAt: string | null
   createdAt: string

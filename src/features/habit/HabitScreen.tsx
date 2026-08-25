@@ -14,7 +14,7 @@ import type { TimeSource } from '../../time/timeProvider'
 import { PetCard } from '../pet/PetCard'
 import { recordPetMood } from '../pet/petFlow'
 import type { PetMoodEvent } from '../pet/petFlow'
-import { createHabit, performCheckin, planToday, setCap, buildOverachievementNotice } from './habitFlow'
+import { createHabit, performCheckin, planToday, setCap, buildOverachievementNotice, renameHabit, deleteHabit } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { computeScaleData } from '../scale/scaleFlow'
@@ -29,6 +29,7 @@ const REJECT_LABEL: Record<RejectReason, string> = {
   'missing-note': '打卡记录不能为空',
   'insufficient-vacation-coins': '假期币不足，今天还不能休息',
   'already-checked-in': '今天已经打过卡了，明天再来',
+  'schedule-switched-today': '今天已切换过作息类型，不能再次打卡（防作弊）',
 }
 
 interface Feedback {
@@ -59,6 +60,7 @@ function HabitScreen() {
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [capInput, setCapInput] = useState('')
+  const [renameInput, setRenameInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
@@ -77,6 +79,11 @@ function HabitScreen() {
   )
   const identity = useMemo(
     () => earthStorage.getProfile()?.identityStatement ?? null,
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  /** B4：引导时写下的坏习惯描述（预填建习惯表单） */
+  const badHabitDesc = useMemo(
+    () => earthStorage.getProfile()?.badHabitDesc ?? null,
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const vision = useMemo(
@@ -150,7 +157,11 @@ function HabitScreen() {
     if (result.warning) {
       setFeedback({
         kind: 'warn',
-        text: buildOverachievementNotice(result.overAmount, result.habit.vacationCoins),
+        text: buildOverachievementNotice(
+          result.overAmount,
+          result.vacationCoinsDelta,
+          result.habit.vacationCoins,
+        ),
       })
     } else {
       setFeedback({ kind: 'ok', text: '今日达标 ✓ 以新身份行动的一天' })
@@ -159,8 +170,10 @@ function HabitScreen() {
 
   const toggleSchedule = () => {
     const next: WorkSchedule = schedule === 'day' ? 'night' : 'day'
-    earthStorage.updateProfile({ schedule: next })
+    // B1：记录切换时刻，切换当天禁止再次打卡（防切昼夜刷卡）
+    earthStorage.updateProfile({ schedule: next, lastScheduleSwitchAt: new Date().toISOString() })
     setSchedule(next)
+    setError('作息类型已切换为「' + SCHEDULE_LABEL[next] + '」，今天不能再打卡（防作弊）')
   }
 
   const onCreate = (input: NewHabitInput): { error: string | null } => {
@@ -213,6 +226,37 @@ function HabitScreen() {
     bump()
     setCapInput('')
     setFeedback({ kind: 'ok', text: `已${plan?.locked ? '调整' : '定死'}：每天 ${result.habit!.cap}，不再随天数自动变化（可随时再调）` })
+  }
+
+  /** B6：改名（仅名称，引擎规则不读） */
+  const onRename = () => {
+    setError(null)
+    if (!habit) return
+    const result = renameHabit({ storage: earthStorage }, habit.id, renameInput)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    bump()
+    setRenameInput('')
+    setFeedback({ kind: 'ok', text: `习惯已改名为「${result.habit!.name}」` })
+  }
+
+  /** B6：删除（二次确认，关联打卡记录保留） */
+  const onDelete = () => {
+    setError(null)
+    if (!habit) return
+    const confirmed = window.confirm(`确定删除习惯「${habit.name}」吗？历史打卡记录会保留。`)
+    if (!confirmed) return
+    const result = deleteHabit({ storage: earthStorage }, habit.id)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    bump()
+    setCapInput('')
+    setRenameInput('')
+    setFeedback({ kind: 'ok', text: '习惯已删除，可以建立新的微习惯了' })
   }
 
   const timeLabel = timeSource
@@ -268,7 +312,12 @@ function HabitScreen() {
           解析时间中…
         </div>
       ) : !habit || !plan ? (
-        <CreateHabitForm businessDate={businessDate} onSubmit={onCreate} />
+        <CreateHabitForm
+          businessDate={businessDate}
+          onSubmit={onCreate}
+          initialName={badHabitDesc ?? undefined}
+          initialDirection={badHabitDesc ? 'negative' : undefined}
+        />
       ) : (
         <HabitPanel
           habit={habit}
@@ -280,11 +329,15 @@ function HabitScreen() {
           setNote={setNote}
           capInput={capInput}
           setCapInput={setCapInput}
+          renameInput={renameInput}
+          setRenameInput={setRenameInput}
           error={error}
           feedback={feedback}
           onCheckin={onCheckin}
           onRestDay={onRestDay}
           onLockCap={onLockCap}
+          onRename={onRename}
+          onDelete={onDelete}
         />
       )}
 
@@ -312,7 +365,7 @@ function HabitScreen() {
             zIndex: 10,
           }}
         >
-          {todayChecked ? '今日已打卡 ✓' : '一键打卡'}
+          {todayChecked ? '今日已完成 ✓' : '一键打卡'}
         </button>
       )}
     </main>
@@ -330,11 +383,15 @@ interface HabitPanelProps {
   setNote(v: string): void
   capInput: string
   setCapInput(v: string): void
+  renameInput: string
+  setRenameInput(v: string): void
   error: string | null
   feedback: Feedback | null
   onCheckin(): void
   onRestDay(): void
   onLockCap(): void
+  onRename(): void
+  onDelete(): void
 }
 
 function HabitPanel(props: HabitPanelProps) {
@@ -554,6 +611,64 @@ function HabitPanel(props: HabitPanelProps) {
             }}
           >
             {plan.locked ? '调整' : '定死'}
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 18,
+          paddingTop: 14,
+          borderTop: '1px solid #2c2c4a',
+        }}
+      >
+        <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>习惯管理</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            maxLength={40}
+            value={props.renameInput}
+            onChange={(e) => props.setRenameInput(e.target.value)}
+            placeholder={`改名（当前：${habit.name}）`}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid #2c2c4a',
+              background: '#1b1b33',
+              color: '#e5e5f0',
+              fontSize: 14,
+            }}
+          />
+          <button
+            type="button"
+            onClick={props.onRename}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #2c2c4a',
+              background: '#1b1b33',
+              color: '#e5e5f0',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            改名
+          </button>
+          <button
+            type="button"
+            onClick={props.onDelete}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #8a2c2c',
+              background: '#3a1515',
+              color: '#ff9a9a',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            删除
           </button>
         </div>
       </div>

@@ -82,6 +82,8 @@ export type RejectReason =
   | 'insufficient-vacation-coins'
   /** 同一业务日已打过卡 */
   | 'already-checked-in'
+  /** 当日已切换作息类型（B1 防刷卡：切换当天禁止再次打卡） */
+  | 'schedule-switched-today'
 
 /** 打卡动作结果 */
 export interface CheckinResult {
@@ -100,7 +102,7 @@ export interface CheckinResult {
   warning?: OverachievementWarning
   /** 超额量（未超额为 0） */
   overAmount: number
-  /** 假期币变动（超额累加 / 休息日抵扣为负 / 其他为 0） */
+  /** 假期币变动（超额入币上限=当日目标量 B3 / 休息日抵扣为负 / 其他为 0） */
   vacationCoinsDelta: number
   /** 本次动作后的养成状态 */
   formed: boolean

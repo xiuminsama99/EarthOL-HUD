@@ -146,6 +146,8 @@ function normalizeProfile(p: Record<string, unknown>): PlayerProfile {
     badHabitDesc: typeof p.badHabitDesc === 'string' ? p.badHabitDesc : null,
     personaName: typeof p.personaName === 'string' ? p.personaName : null,
     schedule: p.schedule === 'night' ? 'night' : 'day',
+    lastScheduleSwitchAt:
+      typeof p.lastScheduleSwitchAt === 'string' ? p.lastScheduleSwitchAt : null,
     onboardedAt: typeof p.onboardedAt === 'string' ? p.onboardedAt : null,
     createdAt:
       typeof p.createdAt === 'string'
@@ -216,6 +218,7 @@ export class EarthStorage {
       badHabitDesc: null,
       personaName: null,
       schedule: 'day',
+      lastScheduleSwitchAt: null,
       onboardedAt: null,
       createdAt: new Date().toISOString(),
     }

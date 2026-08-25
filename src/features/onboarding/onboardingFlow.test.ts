@@ -32,6 +32,7 @@ function onboardedProfile(over: Partial<PlayerProfile> = {}): PlayerProfile {
     badHabitDesc: null,
     personaName: null,
     schedule: 'day',
+    lastScheduleSwitchAt: null,
     onboardedAt: '2026-08-26T00:00:00Z',
     createdAt: '2026-08-26T00:00:00Z',
     ...over,
