@@ -58,8 +58,14 @@ export interface CheckinInput {
   schedule: WorkSchedule
   /** 当日完成量（非负整数） */
   amount: number
-  /** 一句话打卡记录「今天我以 XX 身份做了 XX」，空则拒绝 */
-  note: string
+  /**
+   * 一句话打卡记录。
+   * - 未传（undefined）：由引擎基于身份自动生成（零输入体验）
+   * - 传入字符串：使用该文本；trim 后为空仍拒绝（missing-note）
+   */
+  note?: string
+  /** 身份宣言「我是___」（正愿景产物）；未设置时打卡语兜底用习惯名 */
+  identity?: string | null
   /** 今天是否用假期币抵扣休息（抵扣日不计缺勤、不触发动态扣减） */
   restDay?: boolean
 }
@@ -80,6 +86,8 @@ export interface CheckinResult {
   status: CheckinStatus
   /** rejected 时给出原因 */
   reason?: RejectReason
+  /** 最终打卡语：自动生成文本或用户文本（rejected 时为 ''） */
+  note: string
   /** 更新后的习惯状态（rejected 时等于原状态） */
   habit: HabitState
   /** 当日目标量 */

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   FORMED_DAYS,
+  buildAutoNote,
   checkIn,
   getDailyTarget,
   lockCap,
@@ -237,6 +238,118 @@ describe('规则 9：打卡必须附一句话记录', () => {
     expect(r.status).toBe('checked-in')
   })
 })
+
+describe('规则 3 扩展：可调锁死（2026-08 产品反馈）', () => {
+  it('锁死后可重复调用 lockCap 调整上限：调高 / 调低 / 调回起点档', () => {
+    let h = lockCap(habit({ baseAmount: 3, progressStep: 10 }), 10)
+    expect(getDailyTarget(h, '2026-01-13')).toBe(10)
+    h = lockCap(h, 15) // 调高
+    expect(h.cap).toBe(15)
+    expect(getDailyTarget(h, '2026-01-13')).toBe(15)
+    h = lockCap(h, 4) // 调低（仍 ≥ 基准 3）
+    expect(h.cap).toBe(4)
+    expect(getDailyTarget(h, '2026-01-13')).toBe(4)
+    h = lockCap(h, 3) // 调回基准（起点档，边界允许）
+    expect(getDailyTarget(h, '2026-01-13')).toBe(3)
+  })
+
+  it('调整 cap 只改 cap 字段，不影响已积累的养成值 / 总量', () => {
+    const h = lockCap(
+      habit({
+        baseAmount: 3,
+        progressStep: 10,
+        totalAmount: 55,
+        consistencyDays: 9,
+        formationDays: 9,
+      }),
+      12,
+    )
+    const adjusted = lockCap(h, 8)
+    expect(adjusted.cap).toBe(8)
+    expect(adjusted.totalAmount).toBe(55)
+    expect(adjusted.consistencyDays).toBe(9)
+    expect(adjusted.formationDays).toBe(9)
+    expect(adjusted.progressStep).toBe(10)
+    expect(adjusted.isFormed).toBe(false)
+  })
+})
+
+describe('打卡语自动生成（2026-08 产品反馈）', () => {
+  it('未传 note：自动生成基础打卡语（首日 N=1）', () => {
+    const r = checkIn({ habit: habit(), now: NOW, schedule: 'day', amount: 1, identity: '早起的人' })
+    expect(r.status).toBe('checked-in')
+    expect(r.note).toBe('我以早起的人的身份完成了测试习惯的第1次，离目标更近了一点点')
+  })
+
+  it('第 N 日：N 随按等差数列执行的次数增长', () => {
+    const h = habit({ progressStep: 3, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({
+      habit: h,
+      now: NOW,
+      schedule: 'day',
+      amount: getDailyTarget(h, '2026-01-13'),
+      identity: '早起的人',
+    })
+    expect(r.status).toBe('checked-in')
+    expect(r.note).toContain('第4次')
+  })
+
+  it('超额：自动并入「今天多做了 X 个」', () => {
+    const h = habit({ progressStep: 2 }) // 今日目标 3
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 8, identity: '早起的人' })
+    expect(r.status).toBe('checked-in')
+    expect(r.note).toContain('第3次')
+    expect(r.note).toContain('今天多做了5个')
+  })
+
+  it('身份缺失：兜底用习惯名', () => {
+    const r = checkIn({ habit: habit({ name: '每天读一页书' }), now: NOW, schedule: 'day', amount: 1 })
+    expect(r.status).toBe('checked-in')
+    expect(r.note).toContain('每天读一页书')
+    expect(r.note).toContain('第1次')
+  })
+
+  it('用户编辑覆盖：传非空 note 使用用户文本', () => {
+    const r = checkIn({ habit: habit(), now: NOW, schedule: 'day', amount: 1, note: '今天读了 3 页，很爽' })
+    expect(r.status).toBe('checked-in')
+    expect(r.note).toBe('今天读了 3 页，很爽')
+  })
+
+  it('用户显式传空白字符串仍拒绝（missing-note），result.note 为空串', () => {
+    const r = checkIn({ habit: habit(), now: NOW, schedule: 'day', amount: 1, note: '   ' })
+    expect(r.status).toBe('rejected')
+    expect(r.reason).toBe('missing-note')
+    expect(r.note).toBe('')
+  })
+
+  it('休息日未传 note：自动生成休息文案', () => {
+    const h = habit({ vacationCoins: 2, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({
+      habit: h,
+      now: NOW,
+      schedule: 'day',
+      amount: 0,
+      restDay: true,
+      identity: '早起的人',
+    })
+    expect(r.status).toBe('rest-day')
+    expect(r.note).toContain('休息')
+    expect(r.note).toContain('早起的人')
+  })
+
+  it('buildAutoNote 直接断言：首日 / 第 N 日 / 超额 / 身份兜底', () => {
+    expect(buildAutoNote(habit({ name: '俯卧撑', progressStep: 0 }), '健康的人')).toBe(
+      '我以健康的人的身份完成了俯卧撑的第1次，离目标更近了一点点',
+    )
+    expect(buildAutoNote(habit({ name: '俯卧撑', progressStep: 5 }), '健康的人')).toBe(
+      '我以健康的人的身份完成了俯卧撑的第5次，离目标更近了一点点',
+    )
+    expect(buildAutoNote(habit({ name: '俯卧撑', progressStep: 3 }), null, 2)).toBe(
+      '我以俯卧撑的身份完成了俯卧撑的第3次，离目标更近了一点点（今天多做了2个）',
+    )
+  })
+})
+
 
 describe('规则 10：作息类型影响「今天」边界', () => {
   it('夜间工作者：凌晨 0:00-4:59 的操作归属昨日', () => {

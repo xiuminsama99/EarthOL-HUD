@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { HabitState, RejectReason, WorkSchedule } from '../../engine/types'
-import { FORMED_DAYS } from '../../engine/engine'
+import { FORMED_DAYS, buildAutoNote } from '../../engine/engine'
 import { earthStorage } from '../../storage/storage'
 import { businessDateFromSource, timeProvider } from '../../time/timeProvider'
 import type { TimeSource } from '../../time/timeProvider'
@@ -21,7 +21,7 @@ const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
 }
 
 const REJECT_LABEL: Record<RejectReason, string> = {
-  'missing-note': '打卡必须附带一句话记录：今天我以 ___ 的身份做了 ___',
+  'missing-note': '打卡记录不能为空',
   'insufficient-vacation-coins': '假期币不足，今天还不能休息',
   'already-checked-in': '今天已经打过卡了，明天再来',
 }
@@ -64,6 +64,15 @@ function HabitScreen() {
     () => earthStorage.listHabits()[0] ?? null,
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const identity = useMemo(
+    () => earthStorage.getProfile()?.identityStatement ?? null,
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  /** 自动生成打卡语（预览用）：默认展示，用户可确认或编辑覆盖 */
+  const autoNote = useMemo(
+    () => (habit ? buildAutoNote(habit, identity) : ''),
+    [habit, identity],
+  )
   const businessDate = useMemo(
     () => (timeSource ? businessDateFromSource(timeSource, schedule) : null),
     [timeSource, schedule],
@@ -101,7 +110,8 @@ function HabitScreen() {
       habit,
       timeSource.now,
       schedule,
-      { amount: Number(amount), note },
+      // 零输入体验：打卡语为空时交给引擎自动生成
+      { amount: Number(amount), note: note.trim() === '' ? undefined : note },
     )
     const { result } = outcome
     if (result.status === 'rejected') {
@@ -126,7 +136,6 @@ function HabitScreen() {
     if (!habit || !timeSource) return
     const outcome = performCheckin({ storage: earthStorage }, habit, timeSource.now, schedule, {
       amount: 0,
-      note: '今天我选择休息恢复（假期币抵扣）',
       restDay: true,
     })
     const { result } = outcome
@@ -140,15 +149,15 @@ function HabitScreen() {
 
   const onLockCap = () => {
     setError(null)
-    if (!habit || !businessDate) return
-    const result = setCap({ storage: earthStorage }, habit, businessDate, Number(capInput))
+    if (!habit) return
+    const result = setCap({ storage: earthStorage }, habit, Number(capInput))
     if (result.error) {
       setError(result.error)
       return
     }
     bump()
     setCapInput('')
-    setFeedback({ kind: 'ok', text: `已定死：每天 ${result.habit!.cap}，不再随天数变化` })
+    setFeedback({ kind: 'ok', text: `已${plan?.locked ? '调整' : '定死'}：每天 ${result.habit!.cap}，不再随天数自动变化（可随时再调）` })
   }
 
   const timeLabel = timeSource
@@ -188,6 +197,7 @@ function HabitScreen() {
         <HabitPanel
           habit={habit}
           plan={plan}
+          autoNote={autoNote}
           amount={amount}
           setAmount={setAmount}
           note={note}
@@ -208,6 +218,8 @@ function HabitScreen() {
 interface HabitPanelProps {
   habit: HabitState
   plan: ReturnType<typeof planToday>
+  /** 自动生成打卡语预览（默认展示，可确认或编辑覆盖） */
+  autoNote: string
   amount: string
   setAmount(v: string): void
   note: string
@@ -297,16 +309,37 @@ function HabitPanel(props: HabitPanelProps) {
             fontSize: 16,
           }}
         />
+        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+          {[0, 1, 2, 5].map((extra) => (
+            <button
+              key={extra}
+              type="button"
+              onClick={() => props.setAmount(String(plan.target + extra))}
+              style={{
+                flex: 1,
+                padding: '6px 0',
+                borderRadius: 6,
+                border: '1px solid #2c2c4a',
+                background: '#1b1b33',
+                color: extra === 0 ? '#e5e5f0' : '#d9b64a',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              {extra === 0 ? '刚好达标' : `多做了 ${extra} 个`}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-          一句话记录
+          打卡语
         </label>
         <textarea
           value={props.note}
           onChange={(e) => props.setNote(e.target.value)}
-          placeholder="今天我以 ___ 的身份做了 ___"
+          placeholder={props.autoNote}
           rows={2}
           maxLength={200}
           style={{
@@ -322,6 +355,9 @@ function HabitPanel(props: HabitPanelProps) {
             fontFamily: 'inherit',
           }}
         />
+        <div style={{ fontSize: 11, color: '#8b8ba3', marginTop: 4 }}>
+          默认自动生成，也可以自己改：{props.autoNote}
+        </div>
       </div>
 
       {props.error && (
@@ -375,49 +411,47 @@ function HabitPanel(props: HabitPanelProps) {
         }}
       >
         <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-          动态调节条：到自认上限后把习惯量「定死」
+          动态调节条：设定后不再随天数自动变化，可随时调整
         </div>
-        {plan.locked ? (
-          <div style={{ fontSize: 14 }}>
-            已定死：每天 {habit.cap}
-            <span style={{ color: '#8b8ba3', fontSize: 12 }}>（目标不再随天数变化）</span>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={props.capInput}
-              onChange={(e) => props.setCapInput(e.target.value)}
-              placeholder="上限（如 10）"
-              style={{
-                flex: 1,
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px solid #2c2c4a',
-                background: '#1b1b33',
-                color: '#e5e5f0',
-                fontSize: 15,
-              }}
-            />
-            <button
-              type="button"
-              onClick={props.onLockCap}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 8,
-                border: '1px solid #d9b64a',
-                background: '#3a2c15',
-                color: '#ffd27a',
-                fontSize: 14,
-                cursor: 'pointer',
-              }}
-            >
-              定死
-            </button>
+        {plan.locked && (
+          <div style={{ fontSize: 12, color: '#8b8ba3', marginBottom: 6 }}>
+            当前已定死：每天 {habit.cap}
           </div>
         )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={props.capInput}
+            onChange={(e) => props.setCapInput(e.target.value)}
+            placeholder={plan.locked ? `当前 ${habit.cap}，输入新上限` : '上限（如 10）'}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid #2c2c4a',
+              background: '#1b1b33',
+              color: '#e5e5f0',
+              fontSize: 15,
+            }}
+          />
+          <button
+            type="button"
+            onClick={props.onLockCap}
+            style={{
+              padding: '10px 16px',
+              borderRadius: 8,
+              border: '1px solid #d9b64a',
+              background: '#3a2c15',
+              color: '#ffd27a',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            {plan.locked ? '调整' : '定死'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -292,7 +292,7 @@ describe('打卡流程', () => {
   })
 })
 
-describe('锁死（动态调节条）', () => {
+describe('锁死 / 可调上限（动态调节条）', () => {
   it('正向习惯锁死合法上限：目标固定，后续打卡不再推进进度', () => {
     const { deps, storage } = makeDeps()
     const { habit } = createHabit(deps, {
@@ -302,18 +302,18 @@ describe('锁死（动态调节条）', () => {
       cap: null,
       createdAt: BUSINESS_DATE,
     })
-    const r = setCap(deps, habit!, BUSINESS_DATE, 5)
+    const r = setCap(deps, habit!, 5)
     expect(r.error).toBeNull()
     const saved = readHabit(storage)
     expect(saved.cap).toBe(5)
     expect(planToday(saved, '2026-01-13').target).toBe(5)
     // 锁死后打卡：进度不推进，目标恒为 cap
-    const outcome = performCheckin(deps, saved, NOW, 'day', { amount: 5, note: '已达上限' })
+    const outcome = performCheckin(deps, saved, NOW, 'day', { amount: 5 })
     expect(outcome.result.targetAmount).toBe(5)
     expect(readHabit(storage).progressStep).toBe(0)
   })
 
-  it('正向习惯上限低于今日目标被拒绝', () => {
+  it('可调锁死：锁死后可调高 / 调低 / 调回基准（2026-08 产品反馈）', () => {
     const { deps, storage } = makeDeps()
     const { habit } = createHabit(deps, {
       name: '阅读',
@@ -322,14 +322,41 @@ describe('锁死（动态调节条）', () => {
       cap: null,
       createdAt: BUSINESS_DATE,
     })
-    const advanced: HabitState = { ...habit!, progressStep: 4 }
-    storage.upsertHabit(advanced)
-    const r = setCap(deps, advanced, BUSINESS_DATE, 5) // 今日目标 7，5 会倒退
+    const r1 = setCap(deps, habit!, 8)
+    expect(r1.error).toBeNull()
+    expect(readHabit(storage).cap).toBe(8)
+    // 调高
+    const r2 = setCap(deps, readHabit(storage), 12)
+    expect(r2.error).toBeNull()
+    expect(readHabit(storage).cap).toBe(12)
+    // 调低（≥ 基准 3）
+    const r3 = setCap(deps, readHabit(storage), 4)
+    expect(r3.error).toBeNull()
+    expect(readHabit(storage).cap).toBe(4)
+    // 调回基准（起点档，边界允许）
+    const r4 = setCap(deps, readHabit(storage), 3)
+    expect(r4.error).toBeNull()
+    expect(readHabit(storage).cap).toBe(3)
+    // 调整不影响已积累的养成值 / 总量
+    expect(readHabit(storage).totalAmount).toBe(0)
+    expect(readHabit(storage).consistencyDays).toBe(0)
+  })
+
+  it('正向习惯上限低于起始基准被拒绝（不落库）', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 3,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const r = setCap(deps, habit!, 2) // 低于基准 3
     expect(r.error).toContain('不能低于')
     expect(readHabit(storage).cap).toBeNull()
   })
 
-  it('反向习惯上限高于今日目标被拒绝', () => {
+  it('反向习惯上限高于起始基准被拒绝；等于/低于基准合法', () => {
     const { deps, storage } = makeDeps()
     const { habit } = createHabit(deps, {
       name: '少吃一口',
@@ -338,17 +365,17 @@ describe('锁死（动态调节条）', () => {
       cap: null,
       createdAt: BUSINESS_DATE,
     })
-    const advanced: HabitState = { ...habit!, progressStep: 3 }
-    storage.upsertHabit(advanced)
-    // 今日目标 7；cap 8 会倒退（反向只能更少）
-    expect(setCap(deps, advanced, BUSINESS_DATE, 8).error).toContain('不能高于')
-    // cap 6 合法
-    const ok = setCap(deps, advanced, BUSINESS_DATE, 6)
+    expect(setCap(deps, habit!, 12).error).toContain('不能高于') // > 基准
+    expect(readHabit(storage).cap).toBeNull()
+    // 反向锁死只能更少或持平：8 与 10（=基准）均合法
+    const ok = setCap(deps, habit!, 8)
     expect(ok.error).toBeNull()
-    expect(readHabit(storage).cap).toBe(6)
+    expect(readHabit(storage).cap).toBe(8)
+    expect(setCap(deps, readHabit(storage), 10).error).toBeNull()
+    expect(readHabit(storage).cap).toBe(10)
   })
 
-  it('非整数 / 负数上限被拒绝', () => {
+  it('非整数 / 负数 / 超上限值被拒绝', () => {
     const { deps } = makeDeps()
     const { habit } = createHabit(deps, {
       name: '阅读',
@@ -357,8 +384,54 @@ describe('锁死（动态调节条）', () => {
       cap: null,
       createdAt: BUSINESS_DATE,
     })
-    expect(setCap(deps, habit!, BUSINESS_DATE, 0).error).toContain('上限')
-    expect(setCap(deps, habit!, BUSINESS_DATE, 2.5).error).toContain('上限')
+    expect(setCap(deps, habit!, 0).error).toContain('上限')
+    expect(setCap(deps, habit!, 2.5).error).toContain('上限')
+    expect(setCap(deps, habit!, 2_000_000).error).toContain('上限')
+  })
+})
+
+describe('打卡语自动生成（流程层）', () => {
+  it('不传 note：引擎自动生成并落库', () => {
+    const { deps, storage } = makeDeps()
+    storage.updateProfile({ identityStatement: '早起的人' })
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(outcome.record!.note).toBe('我以早起的人的身份完成了阅读的第1次，离目标更近了一点点')
+  })
+
+  it('身份未设置：兜底用习惯名生成', () => {
+    const { deps } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '每天读一页书',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(outcome.record!.note).toContain('每天读一页书')
+    expect(outcome.record!.note).toContain('第1次')
+  })
+
+  it('用户编辑覆盖：传 note 用用户文本', () => {
+    const { deps } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1, note: '今天状态很好' })
+    expect(outcome.record!.note).toBe('今天状态很好')
   })
 })
 

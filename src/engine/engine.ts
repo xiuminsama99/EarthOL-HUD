@@ -85,7 +85,34 @@ export function getDailyTarget(habit: HabitState, businessDate: string): number 
 }
 
 /**
- * 规则 9 支撑：打卡必须附带一句话记录。
+ * 打卡语自动生成（产品口径：身份在引导时已定，用户零手输）。
+ *
+ * 基础：我以【身份】完成了【习惯名】的第【N】次，离目标更近了一点点
+ * 超额：…（今天多做了 X 个）…
+ *
+ * @param identity 身份宣言「我是___」；未设置时兜底用习惯名
+ * @param count 累计按等差数列执行的次数（默认取 habit.progressStep，至少 1）
+ */
+export function buildAutoNote(
+  habit: HabitState,
+  identity: string | null,
+  overAmount = 0,
+  count = Math.max(1, habit.progressStep),
+): string {
+  const who = identity?.trim() ? identity.trim() : habit.name
+  const base = `我以${who}的身份完成了${habit.name}的第${count}次，离目标更近了一点点`
+  return overAmount > 0 ? `${base}（今天多做了${overAmount}个）` : base
+}
+
+/** 休息日自动打卡语（假期币抵扣） */
+export function buildRestNote(habit: HabitState, identity: string | null): string {
+  const who = identity?.trim() ? identity.trim() : habit.name
+  return `今天休息，用假期币抵扣了一天（我以${who}的身份保持节奏）`
+}
+
+/**
+ * 规则 9：打卡语约束。
+ * note 未传（undefined）→ 自动生成（零输入）；传字符串 → trim 后必须非空。
  */
 function hasNote(note: string): boolean {
   return note.trim().length > 0
@@ -101,13 +128,19 @@ function hasNote(note: string): boolean {
  */
 export function checkIn(input: CheckinInput): CheckinResult {
   const { habit, now, schedule, amount, note, restDay } = input
+  const identity = input.identity ?? null
 
-  if (!hasNote(note)) {
+  const businessDate = resolveBusinessDate(now, schedule)
+  const targetAmount = getDailyTarget(habit, businessDate)
+
+  // 规则 9：用户显式传入的记录必须非空；未传则交给自动生成（永远非空）
+  if (note !== undefined && !hasNote(note)) {
     return {
       status: 'rejected',
       reason: 'missing-note',
+      note: '',
       habit,
-      targetAmount: getDailyTarget(habit, resolveBusinessDate(now, schedule)),
+      targetAmount,
       completedAmount: amount,
       overAmount: 0,
       vacationCoinsDelta: 0,
@@ -115,15 +148,13 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
   }
 
-  const businessDate = resolveBusinessDate(now, schedule)
-  const targetAmount = getDailyTarget(habit, businessDate)
-
   // 休息日：用假期币抵扣，不打卡、不计缺勤、不触发扣减
   if (restDay === true) {
     if (habit.vacationCoins <= 0) {
       return {
         status: 'rejected',
         reason: 'insufficient-vacation-coins',
+        note: '',
         habit,
         targetAmount,
         completedAmount: 0,
@@ -140,6 +171,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
         vacationCoins: habit.vacationCoins - 1,
         lastCheckinDate: businessDate,
       },
+      note: note !== undefined ? note.trim() : buildRestNote(habit, identity),
       targetAmount,
       completedAmount: 0,
       overAmount: 0,
@@ -153,6 +185,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     return {
       status: 'rejected',
       reason: 'already-checked-in',
+      note: '',
       habit,
       targetAmount,
       completedAmount: amount,
@@ -195,9 +228,14 @@ export function checkIn(input: CheckinInput): CheckinResult {
       ? { kind: 'overachievement' as const, message: OVERACHIEVEMENT_MESSAGE }
       : undefined
 
+  // 打卡语：用户未输入时按推进后的进度自动生成（超额自动并入）
+  const finalNote =
+    note !== undefined ? note.trim() : buildAutoNote(nextHabit, identity, overAmount)
+
   return {
     status: 'checked-in',
     habit: nextHabit,
+    note: finalNote,
     targetAmount,
     completedAmount: amount,
     warning,
@@ -208,8 +246,10 @@ export function checkIn(input: CheckinInput): CheckinResult {
 }
 
 /**
- * 规则 3：用户设定自认上限后目标量锁死，后续天数不再变化。
+ * 规则 3：用户设定自认上限后目标量锁死，不再随天数自动变化。
  * cap 非 null 即视为锁死；锁死后 progressStep 不再推进。
+ * 本函数可重复调用：同一习惯可随时调高/调低 cap（可调锁死，2026-08 产品反馈），
+ * 约束（正向 ≥ 基准 / 反向 ≤ 基准）由调用方（habitFlow.setCap）校验。
  */
 export function lockCap(habit: HabitState, cap: number): HabitState {
   return { ...habit, cap }

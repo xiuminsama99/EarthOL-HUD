@@ -22,7 +22,7 @@ import type { CheckinRecord } from '../../storage/types'
 export interface HabitDeps {
   storage: Pick<
     EarthStorage,
-    'getHabit' | 'upsertHabit' | 'addCheckin' | 'listCheckins'
+    'getHabit' | 'upsertHabit' | 'addCheckin' | 'listCheckins' | 'getProfile'
   >
 }
 
@@ -106,7 +106,8 @@ export function planToday(habit: HabitState, businessDate: string): TodayPlan {
 /** 打卡动作参数 */
 export interface CheckinAction {
   amount: number
-  note: string
+  /** 一句话记录：不传（undefined）则引擎基于身份自动生成；传空串仍被引擎拒绝 */
+  note?: string
   /** 是否用假期币抵扣休息（默认 false） */
   restDay?: boolean
 }
@@ -125,12 +126,14 @@ export function performCheckin(
   schedule: WorkSchedule,
   action: CheckinAction,
 ): CheckinOutcome {
+  const identity = deps.storage.getProfile()?.identityStatement ?? null
   const input: CheckinInput = {
     habit,
     now,
     schedule,
     amount: action.amount,
     note: action.note,
+    identity,
     restDay: action.restDay === true,
   }
   const result = checkIn(input)
@@ -145,7 +148,7 @@ export function performCheckin(
     businessDate: resolveBusinessDate(now, schedule),
     amount: result.completedAmount,
     targetAmount: result.targetAmount,
-    note: action.note,
+    note: result.note,
     restDay: result.status === 'rest-day',
     createdAt: new Date().toISOString(),
   }
@@ -160,26 +163,30 @@ export interface SetCapResult {
 }
 
 /**
- * 锁死上限校验：
- * - 正整数
- * - 正向习惯：cap 不得低于当日目标（锁死不使目标倒退）
- * - 反向习惯：cap 不得高于当日目标（反向锁死只能更少）
+ * 锁死 / 调整上限（动态调节条落地动作）。
+ *
+ * 可调锁死（2026-08 产品反馈）：设定后不再随天数自动变化，但用户可随时调高/调低。
+ * 约束（相对基准，与引擎规则 3 配套）：
+ * - 正向习惯：新 cap ≥ 基准（不许调到基准以下，=基准即回到起点档）
+ * - 反向习惯：新 cap ≤ 基准（不许调到基准以上，=基准即回到起点档）
+ * 调整只改 cap 字段，不影响已积累的养成值 / 总量。
  */
 export function setCap(
   deps: HabitDeps,
   habit: HabitState,
-  businessDate: string,
   cap: number,
 ): SetCapResult {
   if (!Number.isInteger(cap) || cap < 1) {
     return { habit: null, error: '自认上限必须是大于 0 的整数' }
   }
-  const target = getDailyTarget(habit, businessDate)
-  if (habit.direction === 'positive' && cap < target) {
-    return { habit: null, error: `正向习惯上限不能低于今日目标 ${target}` }
+  if (cap > 1_000_000) {
+    return { habit: null, error: '自认上限过大（上限 100 万）' }
   }
-  if (habit.direction === 'negative' && cap > target) {
-    return { habit: null, error: `反向习惯上限不能高于今日目标 ${target}` }
+  if (habit.direction === 'positive' && cap < habit.baseAmount) {
+    return { habit: null, error: `正向习惯上限不能低于起始基准 ${habit.baseAmount}` }
+  }
+  if (habit.direction === 'negative' && cap > habit.baseAmount) {
+    return { habit: null, error: `反向习惯上限不能高于起始基准 ${habit.baseAmount}` }
   }
   const locked = lockCap(habit, cap)
   deps.storage.upsertHabit(locked)

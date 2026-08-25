@@ -4,6 +4,10 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: true, // 绑定 0.0.0.0，避免仅 IPv6 导致 localhost 无法访问
+    port: 5173,
+  },
   plugins: [
     react(),
     VitePWA({
