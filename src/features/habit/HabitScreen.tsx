@@ -35,7 +35,7 @@ const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
 
 const REJECT_LABEL: Record<RejectReason, string> = {
   'missing-note': '打卡记录不能为空',
-  'insufficient-vacation-coins': '假期币不足：超额打卡可存假期币，存 1 枚即可休息',
+  'insufficient-vacation-coins': '休息券不足：今天多做一点可以存休息券，存 1 张就能休息',
   'already-checked-in': '今天已经打过卡了，明天再来',
   'schedule-switched-today': '今天已切换过作息类型，今天不能再打卡',
 }
@@ -206,7 +206,7 @@ function HabitScreen() {
     bump()
     if (result.mode === 'minimal') {
       // 最低版本：保住今天，心情不动（无功无过）
-      setFeedback({ kind: 'ok', text: '最低版本保住今天 ✓ 不丢养成进度，明天从原目标继续' })
+      setFeedback({ kind: 'ok', text: '今天也算行动了 ✓ 不丢进度，明天从原目标继续' })
       return
     }
     // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
@@ -294,6 +294,11 @@ function HabitScreen() {
     runCheckin({ amount: plan.target })
   }
 
+  /** 快捷打卡（UX-16/20）：卡片内「刚好达标 / 多做了 N」点击即直接打卡，不再只填输入框 */
+  const onQuickCheckin = (value: number) => {
+    runCheckin({ amount: value, note: note.trim() === '' ? undefined : note })
+  }
+
   /** 最低版本（R4）：状态差保底行动，不丢养成进度 */
   const onMinimalCheckin = () => {
     runCheckin({ amount: 1, mode: 'minimal' })
@@ -313,7 +318,7 @@ function HabitScreen() {
     }
     bump()
     recordPetMood({ storage: earthStorage }, 'rest-day')
-    setFeedback({ kind: 'ok', text: '今日休息，假期币 -1，明天满血回归' })
+    setFeedback({ kind: 'ok', text: '今日休息，休息券 -1，明天满血回归' })
   }
 
   const onLockCap = () => {
@@ -326,7 +331,7 @@ function HabitScreen() {
     }
     bump()
     setCapInput('')
-    setFeedback({ kind: 'ok', text: `已${plan?.locked ? '调整' : '定死'}：每天 ${result.habit!.cap}，不再随天数自动变化（可随时再调）` })
+    setFeedback({ kind: 'ok', text: `已${plan?.locked ? '调整' : '固定'}：每天 ${result.habit!.cap}，不再自动变化（可随时再调）` })
   }
 
   /** B6：改名（仅名称，引擎规则不读） */
@@ -357,7 +362,7 @@ function HabitScreen() {
     bump()
     setCapInput('')
     setRenameInput('')
-    setFeedback({ kind: 'ok', text: '习惯已删除，可以建立新的微习惯了' })
+    setFeedback({ kind: 'ok', text: '习惯已删除，可以建立新的习惯了' })
   }
 
   const timeLabel = timeSource
@@ -465,6 +470,7 @@ function HabitScreen() {
           error={error}
           feedback={feedback}
           onCheckin={onCheckin}
+          onQuickCheckin={onQuickCheckin}
           onMinimalCheckin={onMinimalCheckin}
           onRestDay={onRestDay}
           onLockCap={onLockCap}
@@ -497,7 +503,7 @@ function HabitScreen() {
             zIndex: 10,
           }}
         >
-          {todayChecked ? '今日已完成 ✓' : '一键打卡'}
+          {todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
         </button>
       )}
     </main>
@@ -522,6 +528,8 @@ interface HabitPanelProps {
   error: string | null
   feedback: Feedback | null
   onCheckin(): void
+  /** 快捷打卡（UX-16/20）：「刚好达标 / 多做了 N」点击即直接打卡 */
+  onQuickCheckin(amount: number): void
   onMinimalCheckin(): void
   onRestDay(): void
   onLockCap(): void
@@ -535,6 +543,8 @@ function HabitPanel(props: HabitPanelProps) {
   const annualGoal = props.annualGoal?.trim()
   /** UX-7：戒除类习惯目标触底 0 → 完成态 */
   const zeroTarget = plan.target === 0 && habit.direction === 'negative'
+  /** UX-13：超额概念对戒除习惯无意义——只保留「刚好达标」快捷打卡 */
+  const quickExtras = habit.direction === 'positive' ? [0, 1, 2, 5] : [0]
 
   return (
     <div>
@@ -542,11 +552,11 @@ function HabitPanel(props: HabitPanelProps) {
         <h2 style={{ margin: 0, fontSize: 17 }}>{habit.name}</h2>
         <span style={{ fontSize: 12, color: '#8b8ba3', border: '1px solid #2c2c4a', borderRadius: 999, padding: '2px 10px' }}>
           {directionLabel}
-          {plan.locked ? ' · 已定死' : ' · 等差数列'}
+          {plan.locked ? ' · 已固定' : ' · 每天只多一点点'}
         </span>
       </div>
       <p style={{ color: '#8b8ba3', fontSize: 12, marginTop: 0 }}>
-        总量 {habit.totalAmount} · 养成值 {habit.consistencyDays} 天 · 假期币 {habit.vacationCoins} 枚
+        总量 {habit.totalAmount} · 稳定天数 {habit.consistencyDays} 天 · 休息券 {habit.vacationCoins} 张
         {habit.isFormed && <span style={{ color: '#7c5cff' }}> · 已养成 ✓</span>}
       </p>
 
@@ -600,7 +610,7 @@ function HabitPanel(props: HabitPanelProps) {
           fontWeight: 600,
         }}
       >
-        {zeroTarget ? '已达成 🎉' : `${yearlyEffect(plan.target, habit.unit)}，坚持就会抵达`}
+        {zeroTarget ? '已达成 🎉' : `${yearlyEffect(plan.target, habit.unit, habit.direction)}，坚持就会抵达`}
       </p>
 
       {props.feedback && (
@@ -645,11 +655,11 @@ function HabitPanel(props: HabitPanelProps) {
             }}
           />
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            {[0, 1, 2, 5].map((extra) => (
+            {quickExtras.map((extra) => (
               <button
                 key={extra}
                 type="button"
-                onClick={() => props.setAmount(String(plan.target + extra))}
+                onClick={() => props.onQuickCheckin(plan.target + extra)}
                 style={{
                   flex: 1,
                   padding: '6px 0',
@@ -664,6 +674,9 @@ function HabitPanel(props: HabitPanelProps) {
                 {extra === 0 ? '刚好达标' : `多做了 ${extra} 个（不建议）`}
               </button>
             ))}
+          </div>
+          <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 6 }}>
+            点「刚好达标」或「多做了 N」会直接打卡；想输入精确值请在框里填。
           </div>
         </div>
       )}
@@ -721,13 +734,13 @@ function HabitPanel(props: HabitPanelProps) {
               cursor: 'pointer',
             }}
           >
-            打卡
+            按输入量打卡
           </button>
         )}
         <button
           type="button"
           onClick={props.onRestDay}
-          title="消耗 1 枚假期币，今日不打卡也不缺勤；没有币时点按会提示如何获取"
+          title="消耗 1 张休息券，今日不打卡也不缺勤；没有券时点按会提示如何获取"
           style={{
             padding: '12px 14px',
             borderRadius: 8,
@@ -741,12 +754,18 @@ function HabitPanel(props: HabitPanelProps) {
           休息
         </button>
       </div>
+      {/* UX-14：两个「今天不想做」出口的人话区分 */}
+      <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 6, lineHeight: 1.7 }}>
+        「休息」用 1 张休息券，今天不打卡也不缺勤
+        <br />
+        「做 1 个就算数」太累时保底，不丢进度
+      </div>
 
-      {/* 最低版本（R4）：状态差保底行动，不丢养成进度（防流失最后一道防线） */}
+      {/* 最低版本（R4 + UX-12/14 人话化）：状态差保底行动，不丢养成进度（防流失最后一道防线） */}
       <button
         type="button"
         onClick={props.onMinimalCheckin}
-        title="状态差也没关系：做 1 个也算以身份行动，明天从原目标继续，养成进度不丢"
+        title="状态差也没关系：做 1 个也算行动，明天从原目标继续，养成进度不丢"
         style={{
           width: '100%',
           marginTop: 8,
@@ -759,7 +778,7 @@ function HabitPanel(props: HabitPanelProps) {
           cursor: 'pointer',
         }}
       >
-        今天状态差？用最低版本保底（不丢养成进度）
+        今天太累了？做 1 个就算数（不丢进度）
       </button>
 
       <div
@@ -770,11 +789,11 @@ function HabitPanel(props: HabitPanelProps) {
         }}
       >
         <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-          动态调节条：设定后不再随天数自动变化，可随时调整
+          目标调节：固定后每天不再自动变化，可随时再调
         </div>
         {plan.locked && (
           <div style={{ fontSize: 12, color: '#8b8ba3', marginBottom: 6 }}>
-            当前已定死：每天 {habit.cap}
+            当前已固定：每天 {habit.cap}
           </div>
         )}
         <div style={{ display: 'flex', gap: 8 }}>

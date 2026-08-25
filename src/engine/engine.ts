@@ -110,10 +110,10 @@ export function getDailyTarget(habit: HabitState, businessDate: string): number 
 }
 
 /**
- * 打卡语自动生成（产品口径：身份在引导时已定，用户零手输）。
+ * 打卡语自动生成（产品口径：身份在引导时已定，用户零手输；UX-17 通顺化）。
  *
- * 基础：我以【身份】完成了【习惯名】的第【N】次，离目标更近了一点点
- * 超额：…（今天多做了 X 个）…
+ * 基础：今天以【身份】的身份行动了：【习惯】 · 第 N 次，离向往的自己又近了一点点
+ * 超额：… 还多做了 X【单位】，离向往的自己又近了一点点
  *
  * @param identity 身份宣言「我是___」；未设置时兜底用习惯名
  * @param overAmount 超额量（>0 时并入文案）
@@ -126,23 +126,26 @@ export function buildAutoNote(
   count = Math.max(1, habit.actionCount),
 ): string {
   const who = identity?.trim() ? identity.trim() : habit.name
-  const base = `我以${who}的身份完成了${habit.name}的第${count}次，离目标更近了一点点`
-  return overAmount > 0 ? `${base}（今天多做了${overAmount}个）` : base
+  const unit = habit.unit?.trim() || '次'
+  const base = `今天以${who}的身份行动了：${habit.name} · 第${count}次，离向往的自己又近了一点点`
+  return overAmount > 0
+    ? `今天以${who}的身份行动了：${habit.name} · 第${count}次，还多做了${overAmount}${unit}，离向往的自己又近了一点点`
+    : base
 }
 
-/** 休息日自动打卡语（假期币抵扣） */
+/** 休息日自动打卡语（休息券抵扣，UX-17 通顺化） */
 export function buildRestNote(habit: HabitState, identity: string | null): string {
   const who = identity?.trim() ? identity.trim() : habit.name
-  return `今天休息，用假期币抵扣了一天（我以${who}的身份保持节奏）`
+  return `今天休息，用 1 张休息券歇了一天（以${who}的身份继续向前）`
 }
 
 /**
- * 最低版本自动打卡语（R4）：状态差保底行动，目标未达成。
+ * 最低版本自动打卡语（R4 + UX-17 通顺化）：状态差保底行动，目标未达成。
  * 「无论如何都能完成」——保住今天，不丢养成进度。
  */
 export function buildMinimalNote(habit: HabitState, identity: string | null): string {
   const who = identity?.trim() ? identity.trim() : habit.name
-  return `状态不好也没关系，用最低版本保住了今天（我以${who}的身份行动）`
+  return `状态不太好也没关系，做了一点点（以${who}的身份，今天也算行动了）`
 }
 
 /**

@@ -481,11 +481,11 @@ describe('锁死 / 可调上限（动态调节条）', () => {
   })
 })
 
-describe('超额提示文案（habitFlow 层统一构建，UX-6 简化）', () => {
-  it('保留「超额 X 中 Y 已存为假期币」区分与「不计入养成进度」，去掉技术腔', () => {
-    // 超额 5、其中 3 转为假期币、当前共 3 枚（B3 口径：入币上限=当日目标量）
+describe('超额提示文案（habitFlow 层统一构建，UX-6 简化 / UX-12 人话化）', () => {
+  it('保留「超额 X 中 Y 已存为休息券」区分与「不计入养成进度」，去掉技术腔', () => {
+    // 超额 5、其中 3 转为休息券、当前共 3 张（B3 口径：入券上限=当日目标量）
     const notice = buildOverachievementNotice(5, 3, 3)
-    expect(notice).toContain('超额 5 中 3 已存为假期币（当前 3 枚）')
+    expect(notice).toContain('超额 5 中 3 已存为休息券（当前 3 张）')
     expect(notice).toContain('不计入养成进度')
     expect(notice).not.toContain('不建议') // 技术警告不再出现在用户可见文案
     expect(notice).not.toContain('重新计数') // 技术表述移除
@@ -529,13 +529,13 @@ describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
     expect(buildCheckinResultNotice(result({}))).toBe('今日达标 ✓ 以新身份行动的一天')
   })
 
-  it('未达标：如实告知「做了 X / 目标 Y」并说明不计入养成线', () => {
+  it('未达标：如实告知「做了 X / 目标 Y」并说明不计入养成进度', () => {
     expect(buildCheckinResultNotice(result({ completedAmount: 3 }))).toBe(
-      '做了 3 / 目标 5，明天继续（未达标当天不计入养成线）',
+      '做了 3 / 目标 5，明天继续（未达标当天不计入养成进度）',
     )
   })
 
-  it('超额：走超额提示（含假期币与养成进度口径）', () => {
+  it('超额：走超额提示（含休息券与养成进度口径）', () => {
     const notice = buildCheckinResultNotice(
       result({
         completedAmount: 8,
@@ -546,7 +546,7 @@ describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
         habit: { ...baseHabit, vacationCoins: 1 },
       }),
     )
-    expect(notice).toContain('超额 3 中 1 已存为假期币（当前 1 枚）')
+    expect(notice).toContain('超额 3 中 1 已存为休息券（当前 1 张）')
     expect(notice).toContain('不计入养成进度')
   })
 })
@@ -597,7 +597,7 @@ describe('打卡语自动生成（流程层）', () => {
     })
     const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
     expect(outcome.result.status).toBe('checked-in')
-    expect(outcome.record!.note).toBe('我以早起的人的身份完成了阅读的第1次，离目标更近了一点点')
+    expect(outcome.record!.note).toBe('今天以早起的人的身份行动了：阅读 · 第1次，离向往的自己又近了一点点')
   })
 
   it('身份未设置：兜底用习惯名生成', () => {

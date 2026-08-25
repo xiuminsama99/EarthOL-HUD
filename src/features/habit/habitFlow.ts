@@ -105,15 +105,15 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
 }
 
 /**
- * 超额反馈提示（A5 明确养成线中断 + B3 文案区分"存入的币"与"真实超额量"）。
- * 超额产生的币上限 = 当日目标量，因此超额量中只有部分转为假期币。
+ * 超额反馈提示（A5 明确养成线中断 + B3 文案区分"存入的券"与"真实超额量"，UX-12 术语人话化）。
+ * 超额产生的休息券上限 = 当日目标量，因此超额量中只有部分转为休息券。
  */
 export function buildOverachievementNotice(
   overAmount: number,
   coinsGained: number,
   vacationCoins: number,
 ): string {
-  return `超额 ${overAmount} 中 ${coinsGained} 已存为假期币（当前 ${vacationCoins} 枚）——超额当天不计入养成进度`
+  return `超额 ${overAmount} 中 ${coinsGained} 已存为休息券（当前 ${vacationCoins} 张）——超额当天不计入养成进度`
 }
 
 /**
@@ -131,7 +131,7 @@ export function buildCheckinResultNotice(result: CheckinResult): string {
     )
   }
   if (result.completedAmount < result.targetAmount) {
-    return `做了 ${result.completedAmount} / 目标 ${result.targetAmount}，明天继续（未达标当天不计入养成线）`
+    return `做了 ${result.completedAmount} / 目标 ${result.targetAmount}，明天继续（未达标当天不计入养成进度）`
   }
   return '今日达标 ✓ 以新身份行动的一天'
 }

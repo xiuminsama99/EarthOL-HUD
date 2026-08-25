@@ -117,7 +117,7 @@ export function ScalePanel({ scale, petBreed, petName, identity, vision }: Scale
             {scale.actionDays}
             <span style={{ fontSize: 11, color: '#8b8ba3' }}> 天</span>
           </div>
-          <div style={{ fontSize: 11, color: '#8b8ba3' }}>以身份行动</div>
+          <div style={{ fontSize: 11, color: '#8b8ba3' }}>行动天数</div>
         </div>
         <div style={statBox}>
           <div style={{ fontSize: 20, fontWeight: 700 }}>

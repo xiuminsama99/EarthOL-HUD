@@ -89,14 +89,22 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
 ]
 
 /**
- * 年度累计效果文案：按「当前目标量」换算 365 天累计。
+ * 年度累计效果文案：按「当前目标量」换算 365 天累计（UX-13 按方向换说法）。
  *
  * @param target 当日目标量（锁死后 = cap；未锁死 = 今日目标）
  * @param unit 计量单位（习惯字段 unit）
- * @returns 如「365 天累计 365 个」
+ * @param direction 习惯方向：戒除（negative）用「每天能省出」口径，养成保持「365 天累计」
+ * @returns 如「365 天累计 365 个」/「坚持一年，每天能省出 1825 分钟」
  */
-export function yearlyEffect(target: number, unit: string): string {
+export function yearlyEffect(
+  target: number,
+  unit: string,
+  direction: HabitDirection = 'positive',
+): string {
   const safeTarget = Number.isFinite(target) && target > 0 ? Math.floor(target) : 0
   const u = unit.trim() === '' ? '次' : unit.trim()
-  return `365 天累计 ${safeTarget * 365} ${u}`
+  const total = safeTarget * 365
+  return direction === 'negative'
+    ? `坚持一年，每天能省出 ${total} ${u}`
+    : `365 天累计 ${total} ${u}`
 }

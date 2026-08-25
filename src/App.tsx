@@ -40,22 +40,25 @@ function App() {
   return (
     <div style={{ paddingBottom: 24 }}>
       <HabitScreen />
-      <details
-        style={{
-          maxWidth: 480,
-          margin: '0 auto',
-          padding: '0 24px',
-          color: '#5a5a74',
-          fontSize: 13,
-        }}
-        open={showDiagnostics}
-        onToggle={(e) => setShowDiagnostics(e.currentTarget.open)}
-      >
-        <summary style={{ cursor: 'pointer', userSelect: 'none' }}>诊断面板（开发者用）</summary>
-        <div style={{ marginTop: 8 }}>
-          <FoundationPanel />
-        </div>
-      </details>
+      {/* UX-19：诊断面板仅开发模式渲染，生产构建不暴露 */}
+      {import.meta.env.DEV && (
+        <details
+          style={{
+            maxWidth: 480,
+            margin: '0 auto',
+            padding: '0 24px',
+            color: '#5a5a74',
+            fontSize: 13,
+          }}
+          open={showDiagnostics}
+          onToggle={(e) => setShowDiagnostics(e.currentTarget.open)}
+        >
+          <summary style={{ cursor: 'pointer', userSelect: 'none' }}>诊断面板（开发者用）</summary>
+          <div style={{ marginTop: 8 }}>
+            <FoundationPanel />
+          </div>
+        </details>
+      )}
     </div>
   )
 }

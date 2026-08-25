@@ -82,9 +82,9 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
 
   return (
     <form onSubmit={submit}>
-      <h2 style={{ fontSize: 17, marginTop: 0 }}>建立第一个微习惯</h2>
+      <h2 style={{ fontSize: 17, marginTop: 0 }}>建立第一个习惯</h2>
       <p style={{ color: '#8b8ba3', fontSize: 13, marginTop: 0 }}>
-        等差数列：每天只多做一步（或只多减一点），到自认上限后定死。
+        每天只多一点点：从第 1 天做起，加到你觉得合适的量就固定下来。
       </p>
 
       <div style={{ marginBottom: 14 }}>
@@ -186,7 +186,7 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>起始基准（第 0 天目标量）</label>
+          <label style={labelStyle}>起始量（第 1 天目标）</label>
           <input
             style={inputStyle}
             type="number"
@@ -197,7 +197,7 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
           />
         </div>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>自认上限（可选，定死）</label>
+          <label style={labelStyle}>固定目标（可选）</label>
           <input
             style={inputStyle}
             type="number"

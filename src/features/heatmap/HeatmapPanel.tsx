@@ -20,7 +20,7 @@ interface HeatmapPanelProps {
   weeks?: number
 }
 
-/** 格子配色（按档位；未来日单独淡化） */
+/** 格子配色（按档位；未来日留白不渲染，避免「像已打卡」误导——UX-18） */
 const CELL_COLORS: Record<HeatmapLevel, string> = {
   0: '#2c2c4a', // 未行动
   1: '#3d4a6e', // 行动（未达标/回归）
@@ -28,8 +28,6 @@ const CELL_COLORS: Record<HeatmapLevel, string> = {
   3: '#d9b64a', // 超额
   4: '#4a3a1c', // 休息日
 }
-
-const FUTURE_COLOR = 'rgba(44, 44, 74, 0.35)'
 
 const LEVEL_LABEL: Record<HeatmapLevel, string> = {
   0: '未行动',
@@ -46,12 +44,10 @@ const panel: CSSProperties = {
   marginBottom: 16,
 }
 
-/** 单元格：颜色 + 悬浮提示 */
+/** 单元格：未来日留白（transparent），过去/今日按档位着色 */
 function Cell({ cell }: { cell: HeatmapCell }) {
-  const color = cell.isFuture ? FUTURE_COLOR : CELL_COLORS[cell.level]
-  const title = cell.isFuture
-    ? `${cell.date}：未来`
-    : `${cell.date}：${LEVEL_LABEL[cell.level]}`
+  const color = cell.isFuture ? 'transparent' : CELL_COLORS[cell.level]
+  const title = `${cell.date}：${LEVEL_LABEL[cell.level]}`
   return (
     <div
       title={title}
@@ -67,14 +63,13 @@ function Cell({ cell }: { cell: HeatmapCell }) {
   )
 }
 
-/** 图例行 */
+/** 图例行（UX-18：去掉「未来」项——未来不渲染） */
 function Legend() {
   const items: { color: string; label: string }[] = [
     { color: CELL_COLORS[1], label: '行动' },
     { color: CELL_COLORS[2], label: '达标' },
     { color: CELL_COLORS[3], label: '超额' },
     { color: CELL_COLORS[4], label: '休息' },
-    { color: FUTURE_COLOR, label: '未来' },
   ]
   return (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>

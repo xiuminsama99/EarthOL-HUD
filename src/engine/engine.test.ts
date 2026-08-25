@@ -290,7 +290,7 @@ describe('打卡语自动生成（2026-08 产品反馈）', () => {
   it('未传 note：自动生成基础打卡语（首日 N=1）', () => {
     const r = checkIn({ habit: habit(), now: NOW, schedule: 'day', amount: 1, identity: '早起的人' })
     expect(r.status).toBe('checked-in')
-    expect(r.note).toBe('我以早起的人的身份完成了测试习惯的第1次，离目标更近了一点点')
+    expect(r.note).toBe('今天以早起的人的身份行动了：测试习惯 · 第1次，离向往的自己又近了一点点')
   })
 
   it('第 N 日：N 随真实打卡成功次数（actionCount）增长', () => {
@@ -306,12 +306,12 @@ describe('打卡语自动生成（2026-08 产品反馈）', () => {
     expect(r.note).toContain('第4次')
   })
 
-  it('超额：自动并入「今天多做了 X 个」', () => {
+  it('超额：自动并入「还多做了 X 单位」', () => {
     const h = habit({ actionCount: 2, progressStep: 2 }) // 今日目标 3
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 8, identity: '早起的人' })
     expect(r.status).toBe('checked-in')
     expect(r.note).toContain('第3次')
-    expect(r.note).toContain('今天多做了5个')
+    expect(r.note).toContain('还多做了5次')
   })
 
   it('身份缺失：兜底用习惯名', () => {
@@ -351,13 +351,13 @@ describe('打卡语自动生成（2026-08 产品反馈）', () => {
 
   it('buildAutoNote 直接断言：首日 / 第 N 日 / 超额 / 身份兜底', () => {
     expect(buildAutoNote(habit({ name: '俯卧撑', actionCount: 0 }), '健康的人')).toBe(
-      '我以健康的人的身份完成了俯卧撑的第1次，离目标更近了一点点',
+      '今天以健康的人的身份行动了：俯卧撑 · 第1次，离向往的自己又近了一点点',
     )
     expect(buildAutoNote(habit({ name: '俯卧撑', actionCount: 5 }), '健康的人')).toBe(
-      '我以健康的人的身份完成了俯卧撑的第5次，离目标更近了一点点',
+      '今天以健康的人的身份行动了：俯卧撑 · 第5次，离向往的自己又近了一点点',
     )
     expect(buildAutoNote(habit({ name: '俯卧撑', actionCount: 3 }), null, 2)).toBe(
-      '我以俯卧撑的身份完成了俯卧撑的第3次，离目标更近了一点点（今天多做了2个）',
+      '今天以俯卧撑的身份行动了：俯卧撑 · 第3次，还多做了2次，离向往的自己又近了一点点',
     )
   })
 })
@@ -506,14 +506,15 @@ describe('R4：最低版本（minimal mode）', () => {
   it('打卡语自动生成（最低版本文案），身份未设置时兜底用习惯名', () => {
     const h = habit({ progressStep: 5, actionCount: 8, lastCheckinDate: '2026-01-12' })
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal' })
-    expect(r.note).toContain('状态不好也没关系，用最低版本保住了今天')
+    expect(r.note).toContain('状态不太好也没关系，做了一点点')
     expect(r.note).toContain('测试习惯')
   })
 
   it('身份宣言存在时打卡语用身份', () => {
     const h = habit({ lastCheckinDate: '2026-01-12' })
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal', identity: '健康的人' })
-    expect(r.note).toContain('我以健康的人的身份行动')
+    expect(r.note).toContain('今天也算行动了')
+    expect(r.note).toContain('健康的人')
   })
 
   it('同日防重：minimal 后当天不能再打卡（normal 或 minimal 均拒绝）', () => {

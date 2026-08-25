@@ -159,9 +159,9 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           你才是自己唯一的玩家。
         </h1>
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7 }}>
-          这不是又一个打卡软件。我们带你用一天时间设定你的「身份」——你将成为谁——
+          这不是又一个打卡软件。我们带你用 10 分钟设定你的「身份」——你将成为谁——
           然后每天只做一件小事，让习惯长成你的一部分。
-          坚持不下去也没关系，系统永不惩罚你。
+          漏一天也没关系，继续就好。
         </p>
         <button
           type="button"
@@ -252,6 +252,16 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           style={{ ...inputStyle, resize: 'vertical' }}
         />
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            style={ghostBtn}
+            onClick={() => {
+              setError(null)
+              setStep(3)
+            }}
+          >
+            跳过
+          </button>
           <button type="button" style={ghostBtn} onClick={() => setStep(1)}>
             上一步
           </button>
@@ -287,6 +297,9 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
             maxLength={40}
             style={{ ...inputStyle, fontSize: 16 }}
           />
+        </div>
+        <div style={{ fontSize: 11, color: '#5a5a74', marginTop: -6, marginBottom: 12 }}>
+          想到什么填什么，之后也能改。
         </div>
         <label style={labelStyle}>展开描述（可选）</label>
         <textarea
@@ -338,6 +351,16 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
         />
         <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 4 }}>可跳过，之后也能随时补充。</div>
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            style={ghostBtn}
+            onClick={() => {
+              setError(null)
+              setStep(5)
+            }}
+          >
+            跳过
+          </button>
           <button type="button" style={ghostBtn} onClick={() => setStep(3)}>
             上一步
           </button>
@@ -391,6 +414,16 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           style={{ ...inputStyle, resize: 'vertical' }}
         />
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            style={ghostBtn}
+            onClick={() => {
+              setError(null)
+              setStep(6)
+            }}
+          >
+            跳过
+          </button>
           <button type="button" style={ghostBtn} onClick={() => setStep(4)}>
             上一步
           </button>
