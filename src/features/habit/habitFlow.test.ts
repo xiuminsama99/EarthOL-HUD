@@ -19,6 +19,7 @@ import {
   isZeroTarget,
   deleteHabit,
   renameHabit,
+  switchSchedule,
   type CheckinOutcome,
   type HabitDeps,
 } from './habitFlow'
@@ -863,5 +864,48 @@ describe('R4：最低版本打卡', () => {
     })
     const outcome = performCheckin(deps, readHabit(storage), NOW, 'day', { amount: 1 })
     expect(outcome.record!.mode).toBe('normal')
+  })
+})
+
+describe('切换作息（N3：主界面与诊断面板共用，B1 守卫不可绕过）', () => {
+  it('day → night：写入新作息与切换时刻，返回新值', () => {
+    const { deps, storage } = makeDeps()
+    const r = switchSchedule(deps, 'day', '2026-01-13T09:00:00+08:00')
+    expect(r.next).toBe('night')
+    const profile = storage.getProfile()
+    expect(profile?.schedule).toBe('night')
+    expect(profile?.lastScheduleSwitchAt).toBe('2026-01-13T09:00:00+08:00')
+  })
+
+  it('night → day：反向切换同样记录时刻', () => {
+    const { deps, storage } = makeDeps()
+    const r = switchSchedule(deps, 'night', '2026-01-13T09:00:00+08:00')
+    expect(r.next).toBe('day')
+    expect(storage.getProfile()?.schedule).toBe('day')
+    expect(storage.getProfile()?.lastScheduleSwitchAt).not.toBeNull()
+  })
+
+  it('未传切换时刻时默认写入当前时刻（非空）', () => {
+    const { deps, storage } = makeDeps()
+    const r = switchSchedule(deps, 'day')
+    expect(r.next).toBe('night')
+    expect(storage.getProfile()?.lastScheduleSwitchAt).not.toBeNull()
+  })
+
+  it('switchSchedule 写入的切换时刻当日触发 B1 守卫：当日打卡被拒、不落库', () => {
+    const { deps, storage } = makeDeps()
+    createHabit(deps, {
+      name: '俯卧撑',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    // 当日（本地 2026-01-13）切换作息
+    switchSchedule(deps, 'day', '2026-01-13T09:00:00+08:00')
+    const outcome = performCheckin(deps, readHabit(storage), NOW, 'night', { amount: 1 })
+    expect(outcome.result.status).toBe('rejected')
+    expect(outcome.result.reason).toBe('schedule-switched-today')
+    expect(outcome.record).toBeNull()
   })
 })

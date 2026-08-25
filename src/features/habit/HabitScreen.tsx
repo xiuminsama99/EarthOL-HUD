@@ -20,7 +20,7 @@ import {
   sendPetReminder,
   shouldRemind,
 } from '../pet/petReminder'
-import { createHabit, performCheckin, planToday, setCap, buildCheckinResultNotice, renameHabit, deleteHabit } from './habitFlow'
+import { createHabit, performCheckin, planToday, setCap, buildCheckinResultNotice, renameHabit, deleteHabit, switchSchedule } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { yearlyEffect } from './habitTemplates'
@@ -225,13 +225,14 @@ function HabitScreen() {
   }
 
   const toggleSchedule = () => {
-    const next: WorkSchedule = schedule === 'day' ? 'night' : 'day'
-    // B1：记录切换时刻，切换当天禁止再次打卡（防切昼夜刷卡）；窗口确认避免误触锁死当天
+    // B1：切换记录时刻，切换当天禁止再次打卡（防切昼夜刷卡）；窗口确认避免误触锁死当天
     const confirmed = window.confirm('切换作息后今天不能再打卡，确定吗？')
     if (!confirmed) return
-    earthStorage.updateProfile({ schedule: next, lastScheduleSwitchAt: new Date().toISOString() })
+    const { next } = switchSchedule({ storage: earthStorage }, schedule)
     setSchedule(next)
-    setError(`已切换为${SCHEDULE_LABEL[next]}，明天起按新作息计算`)
+    setError(null)
+    // N2：成功/中性反馈走 ok 通道（绿色），不再用红色告警样式
+    setFeedback({ kind: 'ok', text: `已切换为${SCHEDULE_LABEL[next]}，明天起按新作息计算` })
   }
 
   /** R6：宠物提醒开关（开启时请求通知权限；拒绝则保持关闭） */
@@ -618,78 +619,84 @@ function HabitPanel(props: HabitPanelProps) {
         </p>
       )}
 
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-          今日完成量
-        </label>
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={props.amount}
-          onChange={(e) => props.setAmount(e.target.value)}
-          placeholder={`今日目标 ${plan.target}`}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '10px 12px',
-            borderRadius: 8,
-            border: '1px solid #2c2c4a',
-            background: '#1b1b33',
-            color: '#e5e5f0',
-            fontSize: 16,
-          }}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-          {[0, 1, 2, 5].map((extra) => (
-            <button
-              key={extra}
-              type="button"
-              onClick={() => props.setAmount(String(plan.target + extra))}
-              style={{
-                flex: 1,
-                padding: '6px 0',
-                borderRadius: 6,
-                border: '1px solid #2c2c4a',
-                background: '#1b1b33',
-                color: extra === 0 ? '#e5e5f0' : '#d9b64a',
-                fontSize: 12,
-                cursor: 'pointer',
-              }}
-            >
-              {extra === 0 ? '刚好达标' : `多做了 ${extra} 个（不建议）`}
-            </button>
-          ))}
+      {/* N1：戒除归 0 完成态下隐藏手动打卡区（「刚好达标=置0」与「完成量至少1」自相矛盾；
+          手动输 ≥1 又产生「超额 X 中 0 已存为假期币」怪异文案）——只保留底部一键打卡与休息/最低版本 */}
+      {!zeroTarget && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
+            今日完成量
+          </label>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={props.amount}
+            onChange={(e) => props.setAmount(e.target.value)}
+            placeholder={`今日目标 ${plan.target}`}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid #2c2c4a',
+              background: '#1b1b33',
+              color: '#e5e5f0',
+              fontSize: 16,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            {[0, 1, 2, 5].map((extra) => (
+              <button
+                key={extra}
+                type="button"
+                onClick={() => props.setAmount(String(plan.target + extra))}
+                style={{
+                  flex: 1,
+                  padding: '6px 0',
+                  borderRadius: 6,
+                  border: '1px solid #2c2c4a',
+                  background: '#1b1b33',
+                  color: extra === 0 ? '#e5e5f0' : '#d9b64a',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                {extra === 0 ? '刚好达标' : `多做了 ${extra} 个（不建议）`}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-          打卡语
-        </label>
-        <textarea
-          value={props.note}
-          onChange={(e) => props.setNote(e.target.value)}
-          placeholder={props.autoNote}
-          rows={2}
-          maxLength={200}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '10px 12px',
-            borderRadius: 8,
-            border: '1px solid #2c2c4a',
-            background: '#1b1b33',
-            color: '#e5e5f0',
-            fontSize: 14,
-            resize: 'vertical',
-            fontFamily: 'inherit',
-          }}
-        />
-        <div style={{ fontSize: 11, color: '#8b8ba3', marginTop: 4 }}>
-          默认自动生成，也可以自己改：{props.autoNote}
+      {!zeroTarget && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
+            打卡语
+          </label>
+          <textarea
+            value={props.note}
+            onChange={(e) => props.setNote(e.target.value)}
+            placeholder={props.autoNote}
+            rows={2}
+            maxLength={200}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid #2c2c4a',
+              background: '#1b1b33',
+              color: '#e5e5f0',
+              fontSize: 14,
+              resize: 'vertical',
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ fontSize: 11, color: '#8b8ba3', marginTop: 4 }}>
+            默认自动生成，也可以自己改：{props.autoNote}
+          </div>
         </div>
-      </div>
+      )}
 
       {props.error && (
         <p role="alert" style={{ color: '#ff7a7a', fontSize: 13 }}>
@@ -698,23 +705,25 @@ function HabitPanel(props: HabitPanelProps) {
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          type="button"
-          onClick={props.onCheckin}
-          style={{
-            flex: 1,
-            padding: '12px',
-            borderRadius: 8,
-            border: 'none',
-            background: '#7c5cff',
-            color: '#fff',
-            fontSize: 16,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          打卡
-        </button>
+        {!zeroTarget && (
+          <button
+            type="button"
+            onClick={props.onCheckin}
+            style={{
+              flex: 1,
+              padding: '12px',
+              borderRadius: 8,
+              border: 'none',
+              background: '#7c5cff',
+              color: '#fff',
+              fontSize: 16,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            打卡
+          </button>
+        )}
         <button
           type="button"
           onClick={props.onRestDay}

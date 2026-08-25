@@ -9,6 +9,7 @@ import type { CSSProperties } from 'react'
 import { authProvider } from './auth/authProvider'
 import type { WorkSchedule } from './engine/types'
 import { earthStorage } from './storage/storage'
+import { switchSchedule } from './features/habit/habitFlow'
 import { businessDateFromSource, timeProvider } from './time/timeProvider'
 import type { TimeSource } from './time/timeProvider'
 
@@ -49,8 +50,11 @@ function FoundationPanel() {
   )
 
   const toggleSchedule = () => {
-    const next: WorkSchedule = schedule === 'day' ? 'night' : 'day'
-    earthStorage.updateProfile({ schedule: next })
+    // N3：与主界面一致——窗口确认 + 记录切换时刻（写入 lastScheduleSwitchAt，B1 守卫生效），
+    // 避免诊断面板绕过守卫导致「切昼夜刷卡」
+    const confirmed = window.confirm('切换作息后今天不能再打卡，确定吗？')
+    if (!confirmed) return
+    const { next } = switchSchedule({ storage: earthStorage }, schedule)
     setSchedule(next)
   }
 

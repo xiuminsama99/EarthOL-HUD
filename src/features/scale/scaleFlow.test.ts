@@ -115,13 +115,29 @@ describe('目标达成率与总量', () => {
     expect(computeScaleData(habits, []).totalAmount).toBe(42)
   })
 
-  it('UX-8：累计总量单位取首个习惯的 unit（无习惯默认「次」）', () => {
+  it('N4：单位不一致回退「次」（避免多单位混用）；无习惯默认「次」', () => {
     const habits = [
       makeHabit({ id: 'h1', unit: '个' }),
       makeHabit({ id: 'h2', unit: '页' }),
     ]
-    expect(computeScaleData(habits, []).unit).toBe('个')
+    expect(computeScaleData(habits, []).unit).toBe('次')
     expect(computeScaleData([], []).unit).toBe('次')
+  })
+
+  it('N4：全部习惯单位一致时用该单位', () => {
+    const habits = [
+      makeHabit({ id: 'h1', unit: '个' }),
+      makeHabit({ id: 'h2', unit: '个' }),
+    ]
+    expect(computeScaleData(habits, []).unit).toBe('个')
+  })
+
+  it('N4：空白单位忽略不计，剩余单位一致时用该单位', () => {
+    const habits = [
+      makeHabit({ id: 'h1', unit: '' }),
+      makeHabit({ id: 'h2', unit: '个' }),
+    ]
+    expect(computeScaleData(habits, []).unit).toBe('个')
   })
 })
 

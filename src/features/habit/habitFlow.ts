@@ -28,6 +28,7 @@ export interface HabitDeps {
     | 'listCheckins'
     | 'getProfile'
     | 'removeHabit'
+    | 'updateProfile'
   >
 }
 
@@ -320,4 +321,23 @@ export function renameHabit(
   const renamed: HabitState = { ...existing, name }
   deps.storage.upsertHabit(renamed)
   return { habit: renamed, error: null }
+}
+
+/**
+ * 切换作息类型（N3：主界面与诊断面板共用，防 B1 守卫被绕过）。
+ * 写入新作息 + 切换时刻（lastScheduleSwitchAt），切换当天禁止再次打卡。
+ * window.confirm 由调用方负责；本函数只做持久化与返回新值。
+ * @param switchedAt 切换时刻（ISO，默认取当前时刻；测试注入固定时间用）
+ */
+export function switchSchedule(
+  deps: HabitDeps,
+  current: WorkSchedule,
+  switchedAt = new Date().toISOString(),
+): { next: WorkSchedule } {
+  const next: WorkSchedule = current === 'day' ? 'night' : 'day'
+  deps.storage.updateProfile({
+    schedule: next,
+    lastScheduleSwitchAt: switchedAt,
+  })
+  return { next }
 }
