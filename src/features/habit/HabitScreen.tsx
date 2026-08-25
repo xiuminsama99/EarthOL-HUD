@@ -11,6 +11,9 @@ import { FORMED_DAYS, buildAutoNote } from '../../engine/engine'
 import { earthStorage } from '../../storage/storage'
 import { businessDateFromSource, timeProvider } from '../../time/timeProvider'
 import type { TimeSource } from '../../time/timeProvider'
+import { PetCard } from '../pet/PetCard'
+import { recordPetMood } from '../pet/petFlow'
+import type { PetMoodEvent } from '../pet/petFlow'
 import { createHabit, performCheckin, planToday, setCap } from './habitFlow'
 import type { NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
@@ -119,6 +122,12 @@ function HabitScreen() {
       return
     }
     bump()
+    // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
+    const moodEvent: PetMoodEvent =
+      (plan?.backoffDays ?? 0) > 0 ? 'checkin-backoff'
+      : result.warning ? 'checkin-extra'
+      : 'checkin'
+    recordPetMood({ storage: earthStorage }, moodEvent)
     if (result.status === 'rest-day') {
       setFeedback({ kind: 'ok', text: '今日休息，假期币 -1，明天满血回归' })
     } else if (result.warning) {
@@ -144,6 +153,7 @@ function HabitScreen() {
       return
     }
     bump()
+    recordPetMood({ storage: earthStorage }, 'rest-day')
     setFeedback({ kind: 'ok', text: '今日休息，假期币 -1，明天满血回归' })
   }
 
@@ -169,6 +179,8 @@ function HabitScreen() {
   return (
     <main style={panel}>
       <h1 style={{ marginTop: 0, fontSize: 20 }}>地球online玩家控制台</h1>
+
+      <PetCard refreshKey={refresh} />
 
       <div style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}>
         <div style={row}>
