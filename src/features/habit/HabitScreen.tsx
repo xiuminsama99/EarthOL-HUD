@@ -4,7 +4,7 @@
  * 薄壳组件：数据流 = timeProvider 取网络时间 → businessDateFromSource 定业务日
  * → habitFlow 调引擎判定 + 持久化 → 重新读取渲染。领域规则零散落在引擎。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { HabitState, RejectReason, WorkSchedule } from '../../engine/types'
 import { FORMED_DAYS, buildAutoNote } from '../../engine/engine'
@@ -14,6 +14,12 @@ import type { TimeSource } from '../../time/timeProvider'
 import { PetCard } from '../pet/PetCard'
 import { recordPetMood } from '../pet/petFlow'
 import type { PetMoodEvent } from '../pet/petFlow'
+import {
+  DEFAULT_REMINDER_TIME,
+  isValidReminderTime,
+  sendPetReminder,
+  shouldRemind,
+} from '../pet/petReminder'
 import { createHabit, performCheckin, planToday, setCap, buildOverachievementNotice, renameHabit, deleteHabit } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
@@ -66,13 +72,59 @@ function HabitScreen() {
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
+  /** R6：schedule 最新值供定时器闭包读取（interval 只注册一次） */
+  const scheduleRef = useRef(schedule)
+  scheduleRef.current = schedule
+
+  const [reminderEnabled, setReminderEnabled] = useState(
+    () => earthStorage.getProfile()?.petReminderEnabled ?? false,
+  )
+  const [reminderTime, setReminderTime] = useState(
+    () => earthStorage.getProfile()?.petReminderTime ?? DEFAULT_REMINDER_TIME,
+  )
+
+  /**
+   * R6：提醒检查。应用打开期间每分钟一次；页面关闭无后台推送
+   * （能力边界：定时后台推送需要服务端 + Web Push，BaaS 后置）。
+   * 全部读 storage 最新值，避免闭包过期。
+   */
+  const checkPetReminderOnce = (src: TimeSource) => {
+    const profile = earthStorage.getProfile()
+    const pet = earthStorage.listPets()[0]
+    if (!profile || !pet) return
+    const bd = businessDateFromSource(src, scheduleRef.current)
+    const habit = earthStorage.listHabits()[0]
+    const checkedToday = habit?.lastCheckinDate === bd
+    if (
+      !shouldRemind({
+        now: src.now,
+        businessDate: bd,
+        checkedToday,
+        lastRemindedAt: profile.lastPetReminderDate,
+        profile,
+      })
+    ) {
+      return
+    }
+    if (sendPetReminder(pet, profile.identityStatement) === 'sent') {
+      earthStorage.updateProfile({ lastPetReminderDate: bd })
+    }
+  }
+
   useEffect(() => {
-    void timeProvider.getNow().then(setTimeSource)
+    void timeProvider.getNow().then((src) => {
+      setTimeSource(src)
+      checkPetReminderOnce(src)
+    })
     // A1 修复：周期性刷新时间源，页面跨午夜挂机时业务日自动翻新
     const timer = window.setInterval(() => {
-      void timeProvider.getNow().then(setTimeSource)
+      void timeProvider.getNow().then((src) => {
+        setTimeSource(src)
+        checkPetReminderOnce(src)
+      })
     }, 60_000)
     return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- interval 只注册一次，内部全走 storage 最新值
   }, [])
 
   const habit = useMemo(
@@ -185,6 +237,38 @@ function HabitScreen() {
     earthStorage.updateProfile({ schedule: next, lastScheduleSwitchAt: new Date().toISOString() })
     setSchedule(next)
     setError('作息类型已切换为「' + SCHEDULE_LABEL[next] + '」，今天不能再打卡（防作弊）')
+  }
+
+  /** R6：宠物提醒开关（开启时请求通知权限；拒绝则保持关闭） */
+  const onToggleReminder = async () => {
+    setError(null)
+    const enabled = !reminderEnabled
+    if (enabled && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        setError('通知权限未开启，宠物提醒无法送达')
+        return
+      }
+    }
+    earthStorage.updateProfile({ petReminderEnabled: enabled })
+    setReminderEnabled(enabled)
+    setFeedback({
+      kind: 'ok',
+      text: enabled
+        ? `宠物提醒已开启：每天 ${reminderTime} 会提醒你（应用打开期间）`
+        : '宠物提醒已关闭',
+    })
+  }
+
+  /** R6：提醒时间修改（HH:mm，仅合法值入库） */
+  const onReminderTimeChange = (value: string) => {
+    if (!isValidReminderTime(value)) {
+      setError('提醒时间格式应为 HH:mm（如 20:00）')
+      return
+    }
+    earthStorage.updateProfile({ petReminderTime: value })
+    setReminderTime(value)
+    setError(null)
   }
 
   const onCreate = (input: NewHabitInput): { error: string | null } => {
@@ -315,6 +399,25 @@ function HabitScreen() {
           >
             {SCHEDULE_LABEL[schedule]}
           </button>
+        </div>
+        <div style={row}>
+          <span style={smallLabel}>宠物提醒</span>
+          <button
+            type="button"
+            onClick={onToggleReminder}
+            style={{ background: reminderEnabled ? '#153a2c' : '#1b1b33', color: reminderEnabled ? '#7ee0a8' : '#e5e5f0', border: `1px solid ${reminderEnabled ? '#2c8a5a' : '#2c2c4a'}`, borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
+          >
+            {reminderEnabled ? '已开启' : '已关闭'}
+          </button>
+          {reminderEnabled && (
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={(e) => onReminderTimeChange(e.target.value)}
+              style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}
+            />
+          )}
+          <span style={{ fontSize: 11, color: '#5a5a74' }}>应用打开期间</span>
         </div>
       </div>
 

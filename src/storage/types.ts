@@ -43,6 +43,12 @@ export interface PlayerProfile {
   schedule: WorkSchedule
   /** 最近一次切换作息类型的时刻（设备 ISO；B1 防刷卡：切换当天禁止再次打卡） */
   lastScheduleSwitchAt: string | null
+  /** 宠物提醒开关（R6）：应用打开期间到点提醒；默认关闭 */
+  petReminderEnabled: boolean
+  /** 宠物提醒时间 HH:mm（R6）；默认 20:00 */
+  petReminderTime: string
+  /** 最近一次宠物提醒的业务日 YYYY-MM-DD（R6；防跨刷新重复提醒） */
+  lastPetReminderDate: string | null
   /** 完成引导的时间（老用户跳过判断依据） */
   onboardedAt: string | null
   createdAt: string

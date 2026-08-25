@@ -186,6 +186,13 @@ function normalizeProfile(p: Record<string, unknown>): PlayerProfile {
     schedule: p.schedule === 'night' ? 'night' : 'day',
     lastScheduleSwitchAt:
       typeof p.lastScheduleSwitchAt === 'string' ? p.lastScheduleSwitchAt : null,
+    petReminderEnabled: p.petReminderEnabled === true,
+    petReminderTime:
+      typeof p.petReminderTime === 'string' && /^\d{2}:\d{2}$/.test(p.petReminderTime)
+        ? p.petReminderTime
+        : '20:00',
+    lastPetReminderDate:
+      typeof p.lastPetReminderDate === 'string' ? p.lastPetReminderDate : null,
     onboardedAt: typeof p.onboardedAt === 'string' ? p.onboardedAt : null,
     createdAt:
       typeof p.createdAt === 'string'
@@ -259,6 +266,9 @@ export class EarthStorage {
       personaName: null,
       schedule: 'day',
       lastScheduleSwitchAt: null,
+      petReminderEnabled: false,
+      petReminderTime: '20:00',
+      lastPetReminderDate: null,
       onboardedAt: null,
       createdAt: new Date().toISOString(),
     }

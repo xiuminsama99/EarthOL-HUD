@@ -56,7 +56,7 @@ describe('EarthStorage 数据层', () => {
   it('写入后读取 roundtrip', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
-    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, annualGoal: null, auditScores: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
+    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, annualGoal: null, auditScores: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, petReminderEnabled: false, petReminderTime: '20:00', lastPetReminderDate: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
     const read = s.read()
     expect(read.profile?.id).toBe('p1')
     expect(read.habits).toEqual([])
@@ -450,5 +450,96 @@ describe('EarthStorage 数据层', () => {
     )
     const s = new EarthStorage(backend)
     expect(s.listCheckins()[0]?.mode).toBe('minimal')
+  })
+
+  it('R6：旧档案缺提醒字段时读回默认（关闭 / 20:00 / 未提醒，旧 localStorage 数据可用）', () => {
+    const { backend, store } = makeBackend()
+    const legacyProfile = {
+      id: 'p1',
+      identityStatement: '我是健康的人',
+      vision: null,
+      antivision: null,
+      badHabitDesc: null,
+      annualGoal: null,
+      auditScores: null,
+      personaName: null,
+      schedule: 'day',
+      lastScheduleSwitchAt: null,
+      onboardedAt: '2026-08-25T00:00:00Z',
+      createdAt: '2026-08-25T00:00:00Z',
+    }
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: legacyProfile,
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    const p = s.getProfile()!
+    expect(p.petReminderEnabled).toBe(false)
+    expect(p.petReminderTime).toBe('20:00')
+    expect(p.lastPetReminderDate).toBeNull()
+    expect(p.identityStatement).toBe('我是健康的人') // 其余字段原样保留
+  })
+
+  it('R6：已含提醒字段的档案原样读回，非法时间格式回落默认', () => {
+    const { backend, store } = makeBackend()
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: {
+            id: 'p1',
+            identityStatement: null,
+            vision: null,
+            antivision: null,
+            badHabitDesc: null,
+            annualGoal: null,
+            auditScores: null,
+            personaName: null,
+            schedule: 'day',
+            lastScheduleSwitchAt: null,
+            petReminderEnabled: true,
+            petReminderTime: '08:30',
+            lastPetReminderDate: '2026-08-26',
+            onboardedAt: null,
+            createdAt: '2026-08-25T00:00:00Z',
+          },
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    const p = s.getProfile()!
+    expect(p.petReminderEnabled).toBe(true)
+    expect(p.petReminderTime).toBe('08:30')
+    expect(p.lastPetReminderDate).toBe('2026-08-26')
+    // 非法时间格式 → 回落默认
+    backend.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          ...s.read(),
+          profile: { ...p, petReminderTime: 'bad' },
+        },
+      }),
+    )
+    expect(new EarthStorage(backend).getProfile()?.petReminderTime).toBe('20:00')
   })
 })
