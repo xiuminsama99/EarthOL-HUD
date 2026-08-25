@@ -31,6 +31,7 @@ function habit(overrides: Partial<HabitState> = {}): HabitState {
     isFormed: false,
     vacationCoins: 0,
     lastCheckinDate: null,
+    actionCount: 0,
     createdAt: '2026-01-01',
     ...overrides,
   }
@@ -281,8 +282,8 @@ describe('打卡语自动生成（2026-08 产品反馈）', () => {
     expect(r.note).toBe('我以早起的人的身份完成了测试习惯的第1次，离目标更近了一点点')
   })
 
-  it('第 N 日：N 随按等差数列执行的次数增长', () => {
-    const h = habit({ progressStep: 3, lastCheckinDate: '2026-01-12' })
+  it('第 N 日：N 随真实打卡成功次数（actionCount）增长', () => {
+    const h = habit({ actionCount: 3, progressStep: 3, lastCheckinDate: '2026-01-12' })
     const r = checkIn({
       habit: h,
       now: NOW,
@@ -295,7 +296,7 @@ describe('打卡语自动生成（2026-08 产品反馈）', () => {
   })
 
   it('超额：自动并入「今天多做了 X 个」', () => {
-    const h = habit({ progressStep: 2 }) // 今日目标 3
+    const h = habit({ actionCount: 2, progressStep: 2 }) // 今日目标 3
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 8, identity: '早起的人' })
     expect(r.status).toBe('checked-in')
     expect(r.note).toContain('第3次')
@@ -338,18 +339,57 @@ describe('打卡语自动生成（2026-08 产品反馈）', () => {
   })
 
   it('buildAutoNote 直接断言：首日 / 第 N 日 / 超额 / 身份兜底', () => {
-    expect(buildAutoNote(habit({ name: '俯卧撑', progressStep: 0 }), '健康的人')).toBe(
+    expect(buildAutoNote(habit({ name: '俯卧撑', actionCount: 0 }), '健康的人')).toBe(
       '我以健康的人的身份完成了俯卧撑的第1次，离目标更近了一点点',
     )
-    expect(buildAutoNote(habit({ name: '俯卧撑', progressStep: 5 }), '健康的人')).toBe(
+    expect(buildAutoNote(habit({ name: '俯卧撑', actionCount: 5 }), '健康的人')).toBe(
       '我以健康的人的身份完成了俯卧撑的第5次，离目标更近了一点点',
     )
-    expect(buildAutoNote(habit({ name: '俯卧撑', progressStep: 3 }), null, 2)).toBe(
+    expect(buildAutoNote(habit({ name: '俯卧撑', actionCount: 3 }), null, 2)).toBe(
       '我以俯卧撑的身份完成了俯卧撑的第3次，离目标更近了一点点（今天多做了2个）',
     )
   })
 })
 
+
+describe('A4：打卡语次数 = 真实执行次数（actionCount，独立于 progressStep）', () => {
+  it('锁死后 progressStep 冻结但打卡语次数继续累计', () => {
+    const locked = lockCap(habit({ baseAmount: 1, actionCount: 6, progressStep: 6, lastCheckinDate: '2026-01-12' }), 5)
+    const r = checkIn({ habit: locked, now: NOW, schedule: 'day', amount: 5, identity: '早起的人' })
+    expect(r.status).toBe('checked-in')
+    expect(r.habit.progressStep).toBe(6) // 锁死不推进
+    expect(r.habit.actionCount).toBe(7) // 但真实执行次数照涨
+    expect(r.note).toContain('第7次')
+  })
+
+  it('缺勤回退不影响真实执行次数', () => {
+    const h = habit({ progressStep: 10, actionCount: 3, lastCheckinDate: '2026-01-10' })
+    const r = checkIn({
+      habit: h,
+      now: NOW,
+      schedule: 'day',
+      amount: getDailyTarget(h, '2026-01-13'),
+      identity: '早起的人',
+    })
+    expect(r.status).toBe('checked-in')
+    expect(r.habit.actionCount).toBe(4)
+    expect(r.note).toContain('第4次') // 真实第 4 次
+  })
+
+  it('休息日不累计 actionCount', () => {
+    const h = habit({ vacationCoins: 2, actionCount: 5, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 0, restDay: true })
+    expect(r.status).toBe('rest-day')
+    expect(r.habit.actionCount).toBe(5)
+  })
+
+  it('rejected 不动 actionCount', () => {
+    const h = habit({ actionCount: 4, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, note: '' })
+    expect(r.status).toBe('rejected')
+    expect(r.habit.actionCount).toBe(4)
+  })
+})
 
 describe('规则 10：作息类型影响「今天」边界', () => {
   it('夜间工作者：凌晨 0:00-4:59 的操作归属昨日', () => {

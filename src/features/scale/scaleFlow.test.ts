@@ -30,6 +30,7 @@ function makeHabit(partial: Partial<HabitState> = {}): HabitState {
     isFormed: false,
     vacationCoins: 0,
     lastCheckinDate: null,
+    actionCount: 0,
     createdAt: '2026-01-01',
     ...partial,
   }

@@ -81,6 +81,34 @@ describe('NetworkTimeProvider', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2)
   })
 
+  it('A1：缓存有效期内但跨自然日（午夜保护）→ 强制刷新', async () => {
+    vi.useFakeTimers()
+    try {
+      // 本地 2026-01-01 23:30 首次解析（缓存昨日的绝对时刻）
+      const t1 = new Date(2026, 0, 1, 23, 30)
+      vi.setSystemTime(t1)
+      const fetchFn = vi.fn(async () => makeResponse(t1.toUTCString()))
+      const p = new NetworkTimeProvider({ endpoints: ['https://e1'], fetchFn, maxAgeMs: 60_000 })
+      const cached = await p.refresh()
+      expect(cached.source).toBe('network')
+      // 本地时钟推进到次日 00:10（仍在 maxAge 内，但已跨自然日）
+      vi.setSystemTime(new Date(2026, 0, 2, 0, 10))
+      const s = await p.getNow()
+      expect(fetchFn).toHaveBeenCalledTimes(2) // 跨日 → 强制重新请求
+      expect(s.source).toBe('network')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('A1：同一天内缓存仍生效（不跨日不刷新）', async () => {
+    const fetchFn = vi.fn(async () => makeResponse(DATE_HEADER))
+    const p = new NetworkTimeProvider({ endpoints: ['https://e1'], fetchFn, maxAgeMs: 60_000 })
+    await p.refresh()
+    await p.getNow()
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
   it('lastSource 同步返回最近一次解析结果', async () => {
     const fetchFn = vi.fn(async () => makeResponse(DATE_HEADER))
     const p = new NetworkTimeProvider({ endpoints: ['https://e1'], fetchFn })

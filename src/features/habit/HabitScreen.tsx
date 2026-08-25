@@ -14,7 +14,7 @@ import type { TimeSource } from '../../time/timeProvider'
 import { PetCard } from '../pet/PetCard'
 import { recordPetMood } from '../pet/petFlow'
 import type { PetMoodEvent } from '../pet/petFlow'
-import { createHabit, performCheckin, planToday, setCap } from './habitFlow'
+import { createHabit, performCheckin, planToday, setCap, buildOverachievementNotice } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { computeScaleData } from '../scale/scaleFlow'
@@ -64,6 +64,11 @@ function HabitScreen() {
 
   useEffect(() => {
     void timeProvider.getNow().then(setTimeSource)
+    // A1 修复：周期性刷新时间源，页面跨午夜挂机时业务日自动翻新
+    const timer = window.setInterval(() => {
+      void timeProvider.getNow().then(setTimeSource)
+    }, 60_000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const habit = useMemo(
@@ -145,7 +150,7 @@ function HabitScreen() {
     if (result.warning) {
       setFeedback({
         kind: 'warn',
-        text: `${result.warning.message}，超额 ${result.overAmount} 已转为假期币（当前 ${result.habit.vacationCoins} 枚）`,
+        text: buildOverachievementNotice(result.overAmount, result.habit.vacationCoins),
       })
     } else {
       setFeedback({ kind: 'ok', text: '今日达标 ✓ 以新身份行动的一天' })
@@ -251,8 +256,19 @@ function HabitScreen() {
         </div>
       </div>
 
-      {!habit || !plan ? (
-        <CreateHabitForm businessDate={businessDate ?? ''} onSubmit={onCreate} />
+      {!businessDate ? (
+        <div
+          style={{
+            padding: '40px 0',
+            textAlign: 'center',
+            color: '#8b8ba3',
+            fontSize: 14,
+          }}
+        >
+          解析时间中…
+        </div>
+      ) : !habit || !plan ? (
+        <CreateHabitForm businessDate={businessDate} onSubmit={onCreate} />
       ) : (
         <HabitPanel
           habit={habit}
@@ -349,7 +365,7 @@ function HabitPanel(props: HabitPanelProps) {
         )}
         {!plan.locked && (
           <div style={{ fontSize: 12, color: '#8b8ba3', marginTop: 4 }}>
-            明日目标 {plan.target + (habit.direction === 'positive' ? 1 : -1)}
+            明日目标 {plan.tomorrowTarget}
           </div>
         )}
       </div>
@@ -414,7 +430,7 @@ function HabitPanel(props: HabitPanelProps) {
                 cursor: 'pointer',
               }}
             >
-              {extra === 0 ? '刚好达标' : `多做了 ${extra} 个`}
+              {extra === 0 ? '刚好达标' : `多做了 ${extra} 个（不建议）`}
             </button>
           ))}
         </div>

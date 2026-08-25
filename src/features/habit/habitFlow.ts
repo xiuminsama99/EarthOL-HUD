@@ -43,6 +43,9 @@ export interface CreateResult {
   error: string | null
 }
 
+/** 业务日格式 YYYY-MM-DD（createHabit 防御校验用） */
+const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 /** 建习惯：校验 → 构造领域对象 → 持久化 */
 export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult {
   const name = input.name.trim()
@@ -60,6 +63,10 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
   if (input.cap !== null && input.cap > 1_000_000) {
     return { habit: null, error: '自认上限过大（上限 100 万）' }
   }
+  // 防御：业务日未解析（非法 createdAt）时拒绝，避免脏数据（A3）
+  if (!BUSINESS_DATE_RE.test(input.createdAt)) {
+    return { habit: null, error: '时间尚未解析完成，请稍后再试' }
+  }
 
   const habit: HabitState = {
     id: crypto.randomUUID(),
@@ -74,15 +81,18 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
     isFormed: false,
     vacationCoins: 0,
     lastCheckinDate: null,
+    actionCount: 0,
     createdAt: input.createdAt,
   }
   deps.storage.upsertHabit(habit)
   return { habit, error: null }
 }
 
-/** 今日计划：目标量 + 缺勤回退信息（展示用） */
+/** 今日计划：目标量 + 明日目标 + 缺勤回退信息（展示用） */
 export interface TodayPlan {
   target: number
+  /** 明日目标量（反向触底时为 0，不会出现负数——A2 修复） */
+  tomorrowTarget: number
   /** 缺勤回退天数（0 = 无回退） */
   backoffDays: number
   /** 是否已锁死（cap 非 null） */
@@ -100,7 +110,9 @@ export function planToday(habit: HabitState, businessDate: string): TodayPlan {
         : Math.max(0, habit.baseAmount - habit.progressStep)
     backoffDays = Math.max(0, noMissTarget - target)
   }
-  return { target, backoffDays, locked: habit.cap !== null }
+  const tomorrowTarget =
+    habit.direction === 'positive' ? target + 1 : Math.max(0, target - 1)
+  return { target, tomorrowTarget, backoffDays, locked: habit.cap !== null }
 }
 
 /** 打卡动作参数 */
@@ -154,6 +166,11 @@ export function performCheckin(
   }
   deps.storage.addCheckin(record)
   return { result, record }
+}
+
+/** 超额反馈提示（A5：明确告知养成线中断，UI 复用同一文案） */
+export function buildOverachievementNotice(overAmount: number, vacationCoins: number): string {
+  return `不建议，离目标更远，超额 ${overAmount} 已转为假期币（当前 ${vacationCoins} 枚）。超额当天不计入养成线，连续养成已重新计数`
 }
 
 /** 锁死：定死自认上限（动态调节条落地动作） */

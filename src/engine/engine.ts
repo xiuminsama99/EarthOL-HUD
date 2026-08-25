@@ -91,13 +91,14 @@ export function getDailyTarget(habit: HabitState, businessDate: string): number 
  * 超额：…（今天多做了 X 个）…
  *
  * @param identity 身份宣言「我是___」；未设置时兜底用习惯名
- * @param count 累计按等差数列执行的次数（默认取 habit.progressStep，至少 1）
+ * @param overAmount 超额量（>0 时并入文案）
+ * @param count 累计真实打卡成功次数（默认取 habit.actionCount，至少 1）
  */
 export function buildAutoNote(
   habit: HabitState,
   identity: string | null,
   overAmount = 0,
-  count = Math.max(1, habit.progressStep),
+  count = Math.max(1, habit.actionCount),
 ): string {
   const who = identity?.trim() ? identity.trim() : habit.name
   const base = `我以${who}的身份完成了${habit.name}的第${count}次，离目标更近了一点点`
@@ -205,6 +206,9 @@ export function checkIn(input: CheckinInput): CheckinResult {
   const overAmount = amount > targetAmount ? amount - targetAmount : 0
   const vacationCoins = habit.vacationCoins + overAmount
 
+  // 真实打卡成功次数（锁死 / 缺勤回退不影响；打卡语「第 N 次」用它）
+  const actionCount = habit.actionCount + 1
+
   // 达标日（完成量 === 目标量）：养成值与连续计数都推进；否则养成连续中断
   const achieved = amount === targetAmount
   const consistencyDays = achieved ? habit.consistencyDays + 1 : habit.consistencyDays
@@ -220,6 +224,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     formationDays,
     isFormed,
     vacationCoins,
+    actionCount,
     lastCheckinDate: businessDate,
   }
 

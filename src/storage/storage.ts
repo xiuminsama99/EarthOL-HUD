@@ -86,6 +86,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * 习惯规范化：缺失字段补默认值。
+ * 关键兜底：旧数据（v2 及更早）无 actionCount → 默认 0（A4 修复后字段补全，旧 localStorage 数据仍可用）。
+ */
+function normalizeHabit(h: unknown): HabitState {
+  const x = (h ?? {}) as Partial<HabitState>
+  return {
+    id: typeof x.id === 'string' ? x.id : crypto.randomUUID(),
+    name: typeof x.name === 'string' ? x.name : '',
+    direction: x.direction === 'negative' ? 'negative' : 'positive',
+    baseAmount: typeof x.baseAmount === 'number' && x.baseAmount >= 0 ? x.baseAmount : 1,
+    cap: typeof x.cap === 'number' ? x.cap : null,
+    progressStep: typeof x.progressStep === 'number' ? x.progressStep : 0,
+    totalAmount: typeof x.totalAmount === 'number' ? x.totalAmount : 0,
+    consistencyDays: typeof x.consistencyDays === 'number' ? x.consistencyDays : 0,
+    formationDays: typeof x.formationDays === 'number' ? x.formationDays : 0,
+    isFormed: x.isFormed === true,
+    vacationCoins: typeof x.vacationCoins === 'number' ? x.vacationCoins : 0,
+    lastCheckinDate: typeof x.lastCheckinDate === 'string' ? x.lastCheckinDate : null,
+    actionCount:
+      typeof x.actionCount === 'number' && Number.isFinite(x.actionCount) && x.actionCount >= 0
+        ? x.actionCount
+        : 0,
+    createdAt: typeof x.createdAt === 'string' ? x.createdAt : '',
+  }
+}
+
 /** 校验快照结构；非法返回 null（触发兜底） */
 function validateData(value: unknown): EarthData | null {
   if (!isRecord(value)) return null
@@ -99,7 +126,7 @@ function validateData(value: unknown): EarthData | null {
   if (!Array.isArray(d.bills)) return null
   return {
     profile: d.profile ? normalizeProfile(d.profile as Record<string, unknown>) : null,
-    habits: d.habits as HabitState[],
+    habits: (d.habits as unknown[]).map(normalizeHabit),
     checkins: d.checkins as CheckinRecord[],
     pets: d.pets as Pet[],
     assets: d.assets as Asset[],

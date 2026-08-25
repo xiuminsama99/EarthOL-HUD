@@ -68,7 +68,13 @@ export class NetworkTimeProvider implements TimeProvider {
 
   async getNow(): Promise<TimeSource> {
     const cached = this.last
-    if (cached && Date.now() - cached.fetchedAt.getTime() < this.maxAgeMs) {
+    if (
+      cached &&
+      Date.now() - cached.fetchedAt.getTime() < this.maxAgeMs &&
+      // 跨自然日保护（A1 修复）：缓存仍在有效期内但缓存时间与当前本地时刻
+      // 不在同一天（如页面跨午夜挂机），强制重新请求网络时间
+      sameLocalDate(cached.now, new Date())
+    ) {
       return cached
     }
     return this.refresh()
@@ -117,6 +123,15 @@ export class NetworkTimeProvider implements TimeProvider {
       return null
     }
   }
+}
+
+/** 两个时刻在本地时区是否同一天（YYYY-MM-DD 比较） */
+function sameLocalDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
 }
 
 /** 便捷：用注入时间源与作息类型解析业务日（边界规则见引擎 resolveBusinessDate） */

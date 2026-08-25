@@ -35,6 +35,7 @@ function makeHabit(over: Partial<HabitState> = {}): HabitState {
     isFormed: false,
     vacationCoins: 0,
     lastCheckinDate: null,
+    actionCount: 0,
     createdAt: '2026-08-25',
     ...over,
   }
@@ -144,5 +145,50 @@ describe('EarthStorage 数据层', () => {
     s.upsertHabit(makeHabit())
     s.reset()
     expect(s.read()).toEqual(emptyData())
+  })
+
+  it('A4：旧数据习惯缺 actionCount 时读回默认 0（旧 localStorage 数据可用）', () => {
+    const { backend, store } = makeBackend()
+    const legacy = makeHabit() as unknown as Record<string, unknown>
+    delete legacy.actionCount
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: null,
+          habits: [legacy],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.listHabits()[0]?.actionCount).toBe(0)
+    expect(s.listHabits()[0]?.name).toBe('测试习惯') // 其余字段原样保留
+  })
+
+  it('A4：已含 actionCount 的数据原样读回', () => {
+    const { backend, store } = makeBackend()
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: null,
+          habits: [makeHabit({ actionCount: 7 })],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.listHabits()[0]?.actionCount).toBe(7)
   })
 })

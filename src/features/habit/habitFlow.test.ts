@@ -14,6 +14,7 @@ import {
   performCheckin,
   planToday,
   setCap,
+  buildOverachievementNotice,
   type CheckinOutcome,
   type HabitDeps,
 } from './habitFlow'
@@ -89,6 +90,43 @@ describe('建习惯', () => {
     expect(r.error).toBeNull()
     expect(readHabit(storage).cap).toBe(5)
   })
+
+  it('A3：业务日未解析（非法 createdAt）时拒绝建习惯，不落库', () => {
+    const { deps, storage } = makeDeps()
+    const r = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: '',
+    })
+    expect(r.error).toContain('时间')
+    expect(r.habit).toBeNull()
+    expect(storage.listHabits().length).toBe(0)
+    const bad = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: 'not-a-date',
+    })
+    expect(bad.error).toContain('时间')
+    expect(storage.listHabits().length).toBe(0)
+  })
+
+  it('A4：建习惯即 actionCount=0，首次打卡后为 1', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    expect(readHabit(storage).actionCount).toBe(0)
+    void performCheckin(deps, habit!, NOW, 'day', { amount: 1 })
+    expect(readHabit(storage).actionCount).toBe(1)
+  })
 })
 
 describe('今日计划（目标量 + 回退展示）', () => {
@@ -104,6 +142,7 @@ describe('今日计划（目标量 + 回退展示）', () => {
     void storage
     expect(planToday(habit!, BUSINESS_DATE)).toEqual({
       target: 2,
+      tomorrowTarget: 3,
       backoffDays: 0,
       locked: false,
     })
@@ -137,6 +176,37 @@ describe('今日计划（目标量 + 回退展示）', () => {
     const planBottom = planToday(bottom, '2026-01-20')
     expect(planBottom.target).toBe(1)
     expect(planBottom.backoffDays).toBe(2)
+  })
+
+  it('A2：正向习惯明日目标 +1', () => {
+    const { deps } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 2,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    expect(planToday(habit!, BUSINESS_DATE).tomorrowTarget).toBe(3)
+  })
+
+  it('A2：反向习惯明日目标递减，触底 0 不再为负', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '少吃一口',
+      direction: 'negative',
+      baseAmount: 10,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const advanced: HabitState = { ...habit!, progressStep: 5 } // 今日目标 5
+    storage.upsertHabit(advanced)
+    expect(planToday(advanced, BUSINESS_DATE).tomorrowTarget).toBe(4)
+    const bottom: HabitState = { ...habit!, progressStep: 10 } // 今日目标 0
+    storage.upsertHabit(bottom)
+    const plan = planToday(bottom, BUSINESS_DATE)
+    expect(plan.target).toBe(0)
+    expect(plan.tomorrowTarget).toBe(0) // 触底不再出现负数
   })
 })
 
@@ -387,6 +457,16 @@ describe('锁死 / 可调上限（动态调节条）', () => {
     expect(setCap(deps, habit!, 0).error).toContain('上限')
     expect(setCap(deps, habit!, 2.5).error).toContain('上限')
     expect(setCap(deps, habit!, 2_000_000).error).toContain('上限')
+  })
+})
+
+describe('A5：超额提示文案（habitFlow 层统一构建）', () => {
+  it('明确告知超额不计入养成线、连续养成已重新计数', () => {
+    const notice = buildOverachievementNotice(5, 3)
+    expect(notice).toContain('不建议')
+    expect(notice).toContain('超额 5 已转为假期币（当前 3 枚）')
+    expect(notice).toContain('不计入养成线')
+    expect(notice).toContain('重新计数')
   })
 })
 

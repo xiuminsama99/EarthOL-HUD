@@ -45,6 +45,8 @@ export interface HabitState {
   vacationCoins: number
   /** 上次打卡的业务日（YYYY-MM-DD），null 表示从未打卡 */
   lastCheckinDate: string | null
+  /** 真实打卡成功次数（checked-in 才 +1；休息日/拒绝不计；锁死与缺勤回退不影响）——打卡语「第 N 次」的 N */
+  actionCount: number
   /** 习惯创建的业务日（YYYY-MM-DD） */
   createdAt: string
 }
