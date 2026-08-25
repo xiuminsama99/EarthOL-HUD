@@ -23,6 +23,8 @@ export interface OverachievementWarning {
 /** 习惯状态（引擎读写的最小领域对象） */
 export interface HabitState {
   id: string
+  /** 习惯名称（产品展示用，引擎规则不读） */
+  name: string
   /** 正向/反向习惯 */
   direction: HabitDirection
   /** 起始基准：第 0 天（未推进时）的当日目标量，永不越过 */

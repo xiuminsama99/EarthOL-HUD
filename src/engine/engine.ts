@@ -134,7 +134,12 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
     return {
       status: 'rest-day',
-      habit: { ...habit, vacationCoins: habit.vacationCoins - 1 },
+      // 休息日计入已处理业务日：次日不判缺勤、不触发动态扣减（规则 6）
+      habit: {
+        ...habit,
+        vacationCoins: habit.vacationCoins - 1,
+        lastCheckinDate: businessDate,
+      },
       targetAmount,
       completedAmount: 0,
       overAmount: 0,

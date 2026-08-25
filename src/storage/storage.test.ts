@@ -24,6 +24,7 @@ function makeBackend() {
 function makeHabit(over: Partial<HabitState> = {}): HabitState {
   return {
     id: 'h1',
+    name: '测试习惯',
     direction: 'positive',
     baseAmount: 10,
     cap: null,

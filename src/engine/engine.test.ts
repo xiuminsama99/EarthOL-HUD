@@ -19,6 +19,7 @@ import type { HabitState } from './types'
 function habit(overrides: Partial<HabitState> = {}): HabitState {
   return {
     id: 'h1',
+    name: '测试习惯',
     direction: 'positive',
     baseAmount: 1,
     cap: null,
@@ -145,9 +146,13 @@ describe('规则 6：假期币可抵扣休息日', () => {
     expect(r.habit.vacationCoins).toBe(2)
     expect(r.habit.progressStep).toBe(5) // 不推进
     expect(r.habit.formationDays).toBe(4) // 不中断
-    expect(r.habit.lastCheckinDate).toBe('2026-01-12') // 不计缺勤
-    // 次日归来不被视作缺勤
-    expect(missedDays(r.habit, '2026-01-13')).toBe(0)
+    expect(r.habit.lastCheckinDate).toBe('2026-01-13') // 休息日记入已处理日
+    // 次日归来不被视作缺勤（修复前：休息日未记录日期，隔天判缺勤）
+    expect(missedDays(r.habit, '2026-01-14')).toBe(0)
+    // 连休两天后再归来（1/13、1/14 均休息）：同样不判缺勤
+    const r2 = checkIn({ habit: r.habit, now: new Date(2026, 0, 14, 10, 0), schedule: 'day', amount: 0, note: '再休一天', restDay: true })
+    expect(r2.status).toBe('rest-day')
+    expect(missedDays(r2.habit, '2026-01-15')).toBe(0)
   })
 
   it('假期币不足时休息被拒绝，状态不变', () => {
