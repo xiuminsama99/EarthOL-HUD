@@ -55,7 +55,7 @@ describe('EarthStorage 数据层', () => {
   it('写入后读取 roundtrip', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
-    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, annualGoal: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
+    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, annualGoal: null, auditScores: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
     const read = s.read()
     expect(read.profile?.id).toBe('p1')
     expect(read.habits).toEqual([])
@@ -256,5 +256,107 @@ describe('EarthStorage 数据层', () => {
     )
     const s = new EarthStorage(backend)
     expect(s.getProfile()?.lastScheduleSwitchAt).toBe('2026-08-25T12:00:00+08:00')
+  })
+
+  it('R2：旧档案缺 auditScores 时读回 null（旧 localStorage 数据可用）', () => {
+    const { backend, store } = makeBackend()
+    const legacyProfile = {
+      id: 'p1',
+      identityStatement: '我是健康的人',
+      vision: null,
+      antivision: null,
+      badHabitDesc: null,
+      annualGoal: null,
+      personaName: null,
+      schedule: 'day',
+      onboardedAt: '2026-08-25T00:00:00Z',
+      createdAt: '2026-08-25T00:00:00Z',
+    }
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: legacyProfile,
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.getProfile()?.auditScores).toBeNull()
+    expect(s.getProfile()?.identityStatement).toBe('我是健康的人') // 其余字段原样保留
+  })
+
+  it('R2：已含合法 auditScores 的档案原样读回', () => {
+    const { backend, store } = makeBackend()
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: {
+            id: 'p1',
+            identityStatement: null,
+            vision: null,
+            antivision: null,
+            badHabitDesc: null,
+            annualGoal: null,
+            auditScores: { body: 3, growth: 6, social: 8, wealth: 5 },
+            personaName: null,
+            schedule: 'day',
+            lastScheduleSwitchAt: null,
+            onboardedAt: null,
+            createdAt: '2026-08-25T00:00:00Z',
+          },
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.getProfile()?.auditScores).toEqual({ body: 3, growth: 6, social: 8, wealth: 5 })
+  })
+
+  it('R2：非法 auditScores（越界/缺维度）整块兜底为 null', () => {
+    const { backend, store } = makeBackend()
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: {
+            id: 'p1',
+            identityStatement: null,
+            vision: null,
+            antivision: null,
+            badHabitDesc: null,
+            annualGoal: null,
+            auditScores: { body: 0, growth: 6, social: 8, wealth: 5 },
+            personaName: null,
+            schedule: 'day',
+            lastScheduleSwitchAt: null,
+            onboardedAt: null,
+            createdAt: '2026-08-25T00:00:00Z',
+          },
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.getProfile()?.auditScores).toBeNull()
   })
 })

@@ -7,7 +7,7 @@
  * 依赖注入：storage 由调用方传入，测试注入 Map backend 的 EarthStorage。
  */
 import type { EarthStorage } from '../../storage/storage'
-import type { PlayerProfile } from '../../storage/types'
+import type { AuditScores, PlayerProfile } from '../../storage/types'
 
 export interface OnboardingInput {
   /** 身份宣言「我是___」（必填，正愿景核心） */
@@ -20,6 +20,8 @@ export interface OnboardingInput {
   badHabitDesc: string
   /** 年度主线：以「我是__」的身份，今年最想完成的一件事（三层目标第一层，可选，≤100 字） */
   annualGoal: string
+  /** 人生审计四维分数（1-10，可跳过 = null）；最低分板块引导改变方向（R2） */
+  auditScores: AuditScores | null
 }
 
 export interface OnboardingDeps {
@@ -34,6 +36,48 @@ export interface OnboardingResult {
 /** 已引导判定：档案存在且身份宣言非空即视为已完成引导（老用户跳过） */
 export function isOnboarded(profile: PlayerProfile | null): boolean {
   return profile !== null && profile.identityStatement !== null && profile.identityStatement.trim().length > 0
+}
+
+/** 审计维度元数据：key 顺序即并列时的优先级（body → growth → social → wealth） */
+export const AUDIT_DIMENSION_LABELS: Record<keyof AuditScores, string> = {
+  body: '身体',
+  growth: '成长',
+  social: '人际',
+  wealth: '财富',
+}
+
+/** 最低分板块 → 坏习惯步骤建议文案（引导衔接，R2） */
+export const AUDIT_SUGGESTIONS: Record<keyof AuditScores, string> = {
+  body: '你的身体分最低，运动类习惯会最见效',
+  growth: '你的成长分最低，学习或阅读类习惯会最见效',
+  social: '你的人际分最低，社交或表达类习惯会最见效',
+  wealth: '你的财富分最低，存钱或记账类习惯会最见效',
+}
+
+export interface AuditDimension {
+  key: keyof AuditScores
+  label: string
+  score: number
+}
+
+/**
+ * 最低分维度判定（R2）：并列取第一个（按 AUDIT_DIMENSION_LABELS 顺序）。
+ * 返回 { key, label, score } 供 UI 提示「你的最低分板块是：__」。
+ */
+export function lowestAuditDimension(scores: AuditScores): AuditDimension {
+  const keys = Object.keys(AUDIT_DIMENSION_LABELS) as (keyof AuditScores)[]
+  let lowest = keys[0]
+  for (const k of keys) {
+    if (scores[k] < scores[lowest]) lowest = k
+  }
+  return { key: lowest, label: AUDIT_DIMENSION_LABELS[lowest], score: scores[lowest] }
+}
+
+/** 审计分数校验：null（跳过）或四维均为 1-10 整数 */
+export function isValidAuditScores(scores: AuditScores | null): boolean {
+  if (scores === null) return true
+  const values = [scores.body, scores.growth, scores.social, scores.wealth]
+  return values.every((n) => Number.isInteger(n) && n >= 1 && n <= 10)
 }
 
 /**
@@ -63,6 +107,9 @@ export function submitOnboarding(
   if (input.annualGoal.trim().length > 100) {
     return { profile: null, error: '年度主线最长 100 字，一句话说清楚' }
   }
+  if (!isValidAuditScores(input.auditScores)) {
+    return { profile: null, error: '人生审计请为每个维度选择 1-10 的分值' }
+  }
 
   const profile = deps.storage.updateProfile({
     identityStatement: identity,
@@ -70,6 +117,7 @@ export function submitOnboarding(
     antivision: input.antivision.trim() || null,
     badHabitDesc: input.badHabitDesc.trim() || null,
     annualGoal: input.annualGoal.trim() || null,
+    auditScores: input.auditScores,
     onboardedAt: new Date().toISOString(),
   })
   return { profile, error: null }

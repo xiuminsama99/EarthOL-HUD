@@ -11,6 +11,7 @@
  */
 import type {
   Asset,
+  AuditScores,
   Bill,
   CheckinRecord,
   EarthData,
@@ -54,6 +55,7 @@ export const migrations: Record<number, (prev: unknown) => unknown> = {
             antivision: profile.antivision ?? null,
             badHabitDesc: profile.badHabitDesc ?? null,
             annualGoal: profile.annualGoal ?? null,
+            auditScores: profile.auditScores ?? null,
             onboardedAt: profile.onboardedAt ?? null,
           }
         : null,
@@ -136,6 +138,21 @@ function validateData(value: unknown): EarthData | null {
   }
 }
 
+/**
+ * 审计分数规范化：四维均须为 1-10 整数，任一非法整块丢弃（返回 null）。
+ */
+function normalizeAuditScores(v: unknown): AuditScores | null {
+  if (!isRecord(v)) return null
+  const keys = ['body', 'growth', 'social', 'wealth'] as const
+  const out: number[] = []
+  for (const k of keys) {
+    const n = (v as Record<string, unknown>)[k]
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 10) return null
+    out.push(n)
+  }
+  return { body: out[0], growth: out[1], social: out[2], wealth: out[3] }
+}
+
 /** 档案规范化：缺失字段补默认值，保证读出的 profile 字段齐全 */
 function normalizeProfile(p: Record<string, unknown>): PlayerProfile {
   return {
@@ -146,6 +163,7 @@ function normalizeProfile(p: Record<string, unknown>): PlayerProfile {
     antivision: typeof p.antivision === 'string' ? p.antivision : null,
     badHabitDesc: typeof p.badHabitDesc === 'string' ? p.badHabitDesc : null,
     annualGoal: typeof p.annualGoal === 'string' ? p.annualGoal : null,
+    auditScores: normalizeAuditScores(p.auditScores),
     personaName: typeof p.personaName === 'string' ? p.personaName : null,
     schedule: p.schedule === 'night' ? 'night' : 'day',
     lastScheduleSwitchAt:
@@ -219,6 +237,7 @@ export class EarthStorage {
       antivision: null,
       badHabitDesc: null,
       annualGoal: null,
+      auditScores: null,
       personaName: null,
       schedule: 'day',
       lastScheduleSwitchAt: null,

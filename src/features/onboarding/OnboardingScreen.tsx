@@ -1,15 +1,20 @@
 /**
- * 引导问卷界面（工单 03）
+ * 引导问卷界面（工单 03，R2 增加人生审计步骤）
  *
- * 多步引导：欢迎页 → 反愿景 → 正愿景/身份宣言 → 年度主线（三层目标第一层）
- * → 坏习惯（可选）→ 对比图完成。
+ * 多步引导：欢迎页 → 人生审计（4 维打分）→ 反愿景 → 正愿景/身份宣言 →
+ * 年度主线（三层目标第一层）→ 坏习惯（可选，带最低分建议）→ 对比图完成。
  * 只做步骤编排与文案，校验与持久化委托 onboardingFlow。
  * AI 生成对比图不在范围，用「现状版 vs 向往版」两栏卡片模板兜底。
  */
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { earthStorage } from '../../storage/storage'
-import { submitOnboarding } from './onboardingFlow'
+import type { AuditScores } from '../../storage/types'
+import {
+  AUDIT_SUGGESTIONS,
+  lowestAuditDimension,
+  submitOnboarding,
+} from './onboardingFlow'
 import type { OnboardingInput } from './onboardingFlow'
 
 const panel: CSSProperties = {
@@ -75,6 +80,38 @@ function StepHeader({ step, total, title }: { step: number; total: number; title
   )
 }
 
+/** 人生审计滑块行（R2）：label + 1-10 滑条 + 当前值 */
+function AuditSlider({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string
+  value: number
+  onChange(v: number): void
+  hint: string
+}) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+        <span style={{ fontSize: 14, color: '#e5e5f0' }}>{label}</span>
+        <span style={{ fontSize: 14, color: '#7c5cff', fontWeight: 700 }}>{value} 分</span>
+      </div>
+      <input
+        type="range"
+        min={1}
+        max={10}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ width: '100%', accentColor: '#7c5cff' }}
+      />
+      <div style={{ fontSize: 11, color: '#5a5a74' }}>{hint}</div>
+    </div>
+  )
+}
+
 interface OnboardingScreenProps {
   /** 引导完成后通知父级切换到主界面 */
   onCompleted(): void
@@ -87,6 +124,12 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   const [antivision, setAntivision] = useState('')
   const [badHabit, setBadHabit] = useState('')
   const [annualGoal, setAnnualGoal] = useState('')
+  // 人生审计（R2）：4 维滑块默认 5；「下一步」保存为 audit，「跳过」置 null
+  const [auditBody, setAuditBody] = useState(5)
+  const [auditGrowth, setAuditGrowth] = useState(5)
+  const [auditSocial, setAuditSocial] = useState(5)
+  const [auditWealth, setAuditWealth] = useState(5)
+  const [audit, setAudit] = useState<AuditScores | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const finish = () => {
@@ -96,6 +139,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
       antivision,
       badHabitDesc: badHabit,
       annualGoal,
+      auditScores: audit,
     }
     const { error: err } = submitOnboarding({ storage: earthStorage }, input)
     if (err) {
@@ -134,29 +178,52 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   }
 
   if (step === 1) {
+    const auditLowest = lowestAuditDimension({
+      body: auditBody,
+      growth: auditGrowth,
+      social: auditSocial,
+      wealth: auditWealth,
+    })
     return (
       <main style={panel}>
-        <StepHeader step={2} total={5} title="先看清你最怕什么" />
+        <StepHeader step={2} total={6} title="人生审计：先看清现在的自己" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
-          用大白话写下来：<strong style={{ color: '#ffd27a' }}>5 年后如果什么都不改，我的一个普通周二会怎样？</strong>
-          写得越具体越好——恐惧比欲望更会推着你行动。
+          给现在的自己打个分（1-10，越满意越高）。<strong style={{ color: '#ffd27a' }}>最低分的地方，就是改变最见效的地方</strong>——
+          它告诉你该从哪里开始。
         </p>
-        <textarea
-          value={antivision}
-          onChange={(e) => setAntivision(e.target.value)}
-          placeholder="比如：闹钟响第三遍才爬起来，刷手机到中午，晚上瘫在沙发上想「我本来可以…」"
-          rows={4}
-          maxLength={500}
-          style={{ ...inputStyle, resize: 'vertical' }}
-        />
+        <AuditSlider label="身体" value={auditBody} onChange={setAuditBody} hint="运动 / 睡眠 / 饮食" />
+        <AuditSlider label="成长" value={auditGrowth} onChange={setAuditGrowth} hint="学习 / 技能 / 认知" />
+        <AuditSlider label="人际" value={auditSocial} onChange={setAuditSocial} hint="关系 / 社交 / 表达" />
+        <AuditSlider label="财富" value={auditWealth} onChange={setAuditWealth} hint="收入 / 储蓄 / 理财" />
+        <div
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            borderRadius: 8,
+            background: '#153a2c',
+            color: '#7ee0a8',
+            fontSize: 13,
+          }}
+        >
+          你的最低分板块是：{auditLowest.label}（{auditLowest.score} 分），从这里开始改变。
+        </div>
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={() => setStep(0)}>
-            上一步
+          <button
+            type="button"
+            style={ghostBtn}
+            onClick={() => {
+              setAudit(null)
+              setError(null)
+              setStep(2)
+            }}
+          >
+            跳过
           </button>
           <button
             type="button"
             style={{ ...primaryBtn, flex: 2 }}
             onClick={() => {
+              setAudit({ body: auditBody, growth: auditGrowth, social: auditSocial, wealth: auditWealth })
               setError(null)
               setStep(2)
             }}
@@ -171,7 +238,42 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 2) {
     return (
       <main style={panel}>
-        <StepHeader step={3} total={5} title="你要成为谁？" />
+        <StepHeader step={3} total={6} title="先看清你最怕什么" />
+        <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
+          用大白话写下来：<strong style={{ color: '#ffd27a' }}>5 年后如果什么都不改，我的一个普通周二会怎样？</strong>
+          写得越具体越好——恐惧比欲望更会推着你行动。
+        </p>
+        <textarea
+          value={antivision}
+          onChange={(e) => setAntivision(e.target.value)}
+          placeholder="比如：闹钟响第三遍才爬起来，刷手机到中午，晚上瘫在沙发上想「我本来可以…」"
+          rows={4}
+          maxLength={500}
+          style={{ ...inputStyle, resize: 'vertical' }}
+        />
+        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button type="button" style={ghostBtn} onClick={() => setStep(1)}>
+            上一步
+          </button>
+          <button
+            type="button"
+            style={{ ...primaryBtn, flex: 2 }}
+            onClick={() => {
+              setError(null)
+              setStep(3)
+            }}
+          >
+            下一步
+          </button>
+        </div>
+      </main>
+    )
+  }
+
+  if (step === 3) {
+    return (
+      <main style={panel}>
+        <StepHeader step={4} total={6} title="你要成为谁？" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           不是「我要减肥」，而是「我是健康的人」——行为是身份的结果。用一句大白话填完这句：
         </p>
@@ -196,7 +298,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           style={{ ...inputStyle, resize: 'vertical' }}
         />
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={() => setStep(1)}>
+          <button type="button" style={ghostBtn} onClick={() => setStep(2)}>
             上一步
           </button>
           <button
@@ -205,7 +307,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
             disabled={identity.trim().length === 0}
             onClick={() => {
               setError(null)
-              setStep(3)
+              setStep(4)
             }}
           >
             下一步
@@ -215,10 +317,10 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
     )
   }
 
-  if (step === 3) {
+  if (step === 4) {
     return (
       <main style={panel}>
-        <StepHeader step={4} total={5} title="今年，你最想完成的一件事？" />
+        <StepHeader step={5} total={6} title="今年，你最想完成的一件事？" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           身份有了方向，再给它一个目标。不用多，<strong style={{ color: '#7ee0a8' }}>一年就这一件事</strong>——
           之后每天的微小习惯，都是朝着它迈出的一步。
@@ -236,7 +338,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
         />
         <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 4 }}>可跳过，之后也能随时补充。</div>
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={() => setStep(2)}>
+          <button type="button" style={ghostBtn} onClick={() => setStep(3)}>
             上一步
           </button>
           <button
@@ -244,7 +346,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
             style={{ ...primaryBtn, flex: 2 }}
             onClick={() => {
               setError(null)
-              setStep(4)
+              setStep(5)
             }}
           >
             下一步
@@ -254,10 +356,29 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
     )
   }
 
-  if (step === 4) {
+  if (step === 5) {
+    const auditTip =
+      audit === null
+        ? null
+        : AUDIT_SUGGESTIONS[lowestAuditDimension(audit).key]
     return (
       <main style={panel}>
-        <StepHeader step={5} total={5} title="你想从哪件事开始？" />
+        <StepHeader step={6} total={6} title="你想从哪件事开始？" />
+        {auditTip && (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: '#1b1b33',
+              border: '1px solid #2c2c4a',
+              color: '#ffd27a',
+              fontSize: 13,
+              marginBottom: 10,
+            }}
+          >
+            💡 {auditTip}
+          </div>
+        )}
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           描述一个你最想改掉的坏习惯，或最想养成的第一个好习惯。一句大白话就行，后面我们会帮你拆成每天不可能失败的小事。
         </p>
@@ -270,7 +391,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           style={{ ...inputStyle, resize: 'vertical' }}
         />
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          <button type="button" style={ghostBtn} onClick={() => setStep(2)}>
+          <button type="button" style={ghostBtn} onClick={() => setStep(4)}>
             上一步
           </button>
           <button
@@ -278,7 +399,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
             style={{ ...primaryBtn, flex: 2 }}
             onClick={() => {
               setError(null)
-              setStep(4)
+              setStep(6)
             }}
           >
             下一步
@@ -292,7 +413,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   const hasVision = identity.trim().length > 0
   return (
     <main style={panel}>
-      <StepHeader step={5} total={5} title="两条路，你选一条" />
+      <StepHeader step={6} total={6} title="两条路，你选一条" />
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <div
           style={{

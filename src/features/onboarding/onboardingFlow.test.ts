@@ -6,8 +6,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import { EarthStorage, STORAGE_KEY, CURRENT_VERSION } from '../../storage/storage'
-import type { PlayerProfile } from '../../storage/types'
-import { isOnboarded, submitOnboarding } from './onboardingFlow'
+import type { AuditScores, PlayerProfile } from '../../storage/types'
+import {
+  AUDIT_SUGGESTIONS,
+  isOnboarded,
+  isValidAuditScores,
+  lowestAuditDimension,
+  submitOnboarding,
+} from './onboardingFlow'
 
 function makeBackend() {
   const store = new Map<string, string>()
@@ -31,6 +37,7 @@ function onboardedProfile(over: Partial<PlayerProfile> = {}): PlayerProfile {
     antivision: null,
     badHabitDesc: null,
     annualGoal: null,
+    auditScores: null,
     personaName: null,
     schedule: 'day',
     lastScheduleSwitchAt: null,
@@ -46,6 +53,7 @@ const validInput = {
   antivision: '5 年后还在凌晨两点刷手机',
   badHabitDesc: '熬夜刷手机到一两点',
   annualGoal: '把身体练回二十岁的样子',
+  auditScores: null as AuditScores | null,
 }
 
 describe('onboardingFlow 引导流程', () => {
@@ -60,7 +68,97 @@ describe('onboardingFlow 引导流程', () => {
     expect(profile?.antivision).toBe('5 年后还在凌晨两点刷手机')
     expect(profile?.badHabitDesc).toBe('熬夜刷手机到一两点')
     expect(profile?.annualGoal).toBe('把身体练回二十岁的样子')
+    expect(profile?.auditScores).toBeNull()
     expect(profile?.onboardedAt).not.toBeNull()
+  })
+
+  it('人生审计：四维分数写入档案并可回读', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    const result = submitOnboarding(
+      { storage: s },
+      {
+        ...validInput,
+        auditScores: { body: 3, growth: 6, social: 8, wealth: 5 },
+      },
+    )
+    expect(result.error).toBeNull()
+    expect(s.getProfile()?.auditScores).toEqual({ body: 3, growth: 6, social: 8, wealth: 5 })
+  })
+
+  it('人生审计：跳过（null）不影响提交，auditScores 为 null', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    const result = submitOnboarding({ storage: s }, { ...validInput, auditScores: null })
+    expect(result.error).toBeNull()
+    expect(s.getProfile()?.auditScores).toBeNull()
+  })
+
+  it('人生审计：越界分值被拒绝（0 / 11 / 小数）', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    expect(
+      submitOnboarding(
+        { storage: s },
+        { ...validInput, auditScores: { body: 0, growth: 5, social: 5, wealth: 5 } },
+      ).error,
+    ).toContain('人生审计')
+    expect(
+      submitOnboarding(
+        { storage: s },
+        { ...validInput, auditScores: { body: 11, growth: 5, social: 5, wealth: 5 } },
+      ).error,
+    ).toContain('人生审计')
+    expect(
+      submitOnboarding(
+        { storage: s },
+        { ...validInput, auditScores: { body: 5.5, growth: 5, social: 5, wealth: 5 } },
+      ).error,
+    ).toContain('人生审计')
+    expect(s.getProfile()).toBeNull()
+  })
+
+  it('isValidAuditScores：null 通过，四维 1-10 整数通过，其余拒绝', () => {
+    expect(isValidAuditScores(null)).toBe(true)
+    expect(isValidAuditScores({ body: 1, growth: 10, social: 5, wealth: 7 })).toBe(true)
+    expect(isValidAuditScores({ body: 0, growth: 5, social: 5, wealth: 5 })).toBe(false)
+    expect(isValidAuditScores({ body: 5, growth: 5, social: 5, wealth: 11 })).toBe(false)
+    expect(isValidAuditScores({ body: 5, growth: 5, social: 5.5, wealth: 5 })).toBe(false)
+  })
+
+  it('lowestAuditDimension：返回最低分维度；并列取第一个（body → growth → social → wealth）', () => {
+    expect(lowestAuditDimension({ body: 3, growth: 6, social: 8, wealth: 5 })).toEqual({
+      key: 'body',
+      label: '身体',
+      score: 3,
+    })
+    expect(lowestAuditDimension({ body: 8, growth: 2, social: 5, wealth: 6 })).toEqual({
+      key: 'growth',
+      label: '成长',
+      score: 2,
+    })
+    expect(lowestAuditDimension({ body: 8, growth: 6, social: 4, wealth: 6 })).toEqual({
+      key: 'social',
+      label: '人际',
+      score: 4,
+    })
+    expect(lowestAuditDimension({ body: 8, growth: 6, social: 6, wealth: 1 })).toEqual({
+      key: 'wealth',
+      label: '财富',
+      score: 1,
+    })
+    // 并列：body 与 growth 同为 3，取第一个 body
+    expect(lowestAuditDimension({ body: 3, growth: 3, social: 7, wealth: 9 }).key).toBe('body')
+    // 并列：social 与 wealth 同为 2，取 social
+    expect(lowestAuditDimension({ body: 9, growth: 8, social: 2, wealth: 2 }).key).toBe('social')
+  })
+
+  it('AUDIT_SUGGESTIONS：四个维度都有建议文案，且与标签维度一一对应', () => {
+    const keys = Object.keys(AUDIT_SUGGESTIONS).sort()
+    expect(keys).toEqual(['body', 'growth', 'social', 'wealth'])
+    for (const tip of Object.values(AUDIT_SUGGESTIONS)) {
+      expect(tip.length).toBeGreaterThan(0)
+    }
   })
 
   it('身份宣言必填：空白输入被拒绝', () => {
@@ -99,7 +197,7 @@ describe('onboardingFlow 引导流程', () => {
     const s = new EarthStorage(backend)
     const result = submitOnboarding(
       { storage: s },
-      { identityStatement: '我是早起的人', vision: '', antivision: '', badHabitDesc: '', annualGoal: '   ' },
+      { identityStatement: '我是早起的人', vision: '', antivision: '', badHabitDesc: '', annualGoal: '   ', auditScores: null },
     )
     expect(result.error).toBeNull()
     expect(s.getProfile()?.annualGoal).toBeNull()
@@ -121,7 +219,7 @@ describe('onboardingFlow 引导流程', () => {
     const s = new EarthStorage(backend)
     const result = submitOnboarding(
       { storage: s },
-      { identityStatement: '我是早起的人', vision: '  ', antivision: '', badHabitDesc: '', annualGoal: '' },
+      { identityStatement: '我是早起的人', vision: '  ', antivision: '', badHabitDesc: '', annualGoal: '', auditScores: null },
     )
     expect(result.error).toBeNull()
     const profile = s.getProfile()
@@ -130,6 +228,7 @@ describe('onboardingFlow 引导流程', () => {
     expect(profile?.antivision).toBeNull()
     expect(profile?.badHabitDesc).toBeNull()
     expect(profile?.annualGoal).toBeNull()
+    expect(profile?.auditScores).toBeNull()
   })
 
   it('isOnboarded：无档案 / 空身份 → 未引导（走引导）；有身份 → 已引导（跳过）', () => {
@@ -170,6 +269,7 @@ describe('onboardingFlow 引导流程', () => {
     expect(profile?.antivision).toBeNull()
     expect(profile?.badHabitDesc).toBeNull()
     expect(profile?.onboardedAt).toBeNull()
+    expect(profile?.auditScores).toBeNull()
     expect(profile?.schedule).toBe('day')
     // read 只在内存迁移，不落盘；下次 update 时才写回当前版本
     expect((JSON.parse(store.get(STORAGE_KEY)!) as { version: number }).version).toBe(1)

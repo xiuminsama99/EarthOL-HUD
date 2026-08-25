@@ -7,6 +7,21 @@
  */
 import type { HabitState, WorkSchedule } from '../engine/types'
 
+/**
+ * 人生审计分数（Dan Koe 一日重启第 1 步，R2）。
+ * 四维 1-10 整数，最低分板块 = 改变起点；后续可升级为玩家属性面板数据源。
+ */
+export interface AuditScores {
+  /** 身体（运动/睡眠/饮食） */
+  body: number
+  /** 成长（学习/技能/认知） */
+  growth: number
+  /** 人际（关系/社交/表达） */
+  social: number
+  /** 财富（收入/储蓄/理财） */
+  wealth: number
+}
+
 /** 玩家档案（对应 BaaS 的 users 表） */
 export interface PlayerProfile {
   id: string
@@ -20,6 +35,8 @@ export interface PlayerProfile {
   badHabitDesc: string | null
   /** 年度主线：「以「我是__」的身份，今年最想完成的一件事」（三层目标第一层，可选） */
   annualGoal: string | null
+  /** 人生审计四维分数（1-10，跳过为 null；最低分板块引导改变方向，R2） */
+  auditScores: AuditScores | null
   /** 替身人格名字（工单 04 可复用，先留位） */
   personaName: string | null
   /** 作息类型：白天工作 / 夜间工作 */
