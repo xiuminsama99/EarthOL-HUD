@@ -62,6 +62,8 @@ export interface CheckinRecord {
   note: string
   /** 是否休息日（假期币抵扣） */
   restDay: boolean
+  /** 打卡模式（R4）：normal 正常 / minimal 最低版本保底；旧数据规范化默认 normal */
+  mode: 'normal' | 'minimal'
   createdAt: string
 }
 

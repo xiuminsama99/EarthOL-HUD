@@ -10,7 +10,8 @@
  *
  * 强度分档（level 0-4）：
  * - 0  未行动（当日无任何记录）
- * - 1  行动但未达标 / 缺勤归来达标（回归日是「恢复身份」而非「稳定身份」）
+ * - 1  行动但未达标 / 缺勤归来达标 / 最低版本保底（R4：minimal 记行动但未达标，
+ *       与缺勤归来同档——「恢复/保底」而非「稳定身份」）
  * - 2  达标（完成量 === 当日目标量）
  * - 3  超额（完成量 > 当日目标量）
  * - 4  休息日（假期币抵扣，特殊标记）
@@ -130,6 +131,9 @@ export function computeHeatmap(
     if (rec && !isFuture) {
       if (rec.restDay) {
         level = HEATMAP_LEVEL_REST
+      } else if (rec.mode === 'minimal') {
+        // R4：最低版本保底——记行动但目标未达成，与缺勤归来同档（1 档）
+        level = 1
       } else if (rec.amount > rec.targetAmount) {
         level = 3
       } else if (rec.amount === rec.targetAmount) {

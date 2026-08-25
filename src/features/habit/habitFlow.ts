@@ -127,6 +127,8 @@ export interface CheckinAction {
   note?: string
   /** 是否用假期币抵扣休息（默认 false） */
   restDay?: boolean
+  /** 打卡模式（R4）：normal 默认 / minimal 最低版本保底 */
+  mode?: 'normal' | 'minimal'
 }
 
 export interface CheckinOutcome {
@@ -167,6 +169,7 @@ export function performCheckin(
     const rejected: CheckinResult = {
       status: 'rejected',
       reason: 'schedule-switched-today',
+      mode: action.mode ?? 'normal',
       note: '',
       habit,
       targetAmount: 0,
@@ -186,6 +189,7 @@ export function performCheckin(
     note: action.note,
     identity,
     restDay: action.restDay === true,
+    mode: action.mode ?? 'normal',
   }
   const result = checkIn(input)
   if (result.status === 'rejected') {
@@ -201,6 +205,7 @@ export function performCheckin(
     targetAmount: result.targetAmount,
     note: result.note,
     restDay: result.status === 'rest-day',
+    mode: result.mode,
     createdAt: new Date().toISOString(),
   }
   deps.storage.addCheckin(record)

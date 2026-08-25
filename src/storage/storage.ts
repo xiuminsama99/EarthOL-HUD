@@ -116,6 +116,22 @@ function normalizeHabit(h: unknown): HabitState {
   }
 }
 
+/** 打卡记录规范化（R4）：缺失 mode 的旧数据默认 'normal'，其余字段类型兜底 */
+function normalizeCheckin(c: unknown): CheckinRecord {
+  const x = (c ?? {}) as Partial<CheckinRecord>
+  return {
+    id: typeof x.id === 'string' ? x.id : crypto.randomUUID(),
+    habitId: typeof x.habitId === 'string' ? x.habitId : '',
+    businessDate: typeof x.businessDate === 'string' ? x.businessDate : '',
+    amount: typeof x.amount === 'number' ? x.amount : 0,
+    targetAmount: typeof x.targetAmount === 'number' ? x.targetAmount : 0,
+    note: typeof x.note === 'string' ? x.note : '',
+    restDay: x.restDay === true,
+    mode: x.mode === 'minimal' ? 'minimal' : 'normal',
+    createdAt: typeof x.createdAt === 'string' ? x.createdAt : '',
+  }
+}
+
 /** 校验快照结构；非法返回 null（触发兜底） */
 function validateData(value: unknown): EarthData | null {
   if (!isRecord(value)) return null
@@ -130,7 +146,7 @@ function validateData(value: unknown): EarthData | null {
   return {
     profile: d.profile ? normalizeProfile(d.profile as Record<string, unknown>) : null,
     habits: (d.habits as unknown[]).map(normalizeHabit),
-    checkins: d.checkins as CheckinRecord[],
+    checkins: (d.checkins as unknown[]).map(normalizeCheckin),
     pets: d.pets as Pet[],
     assets: d.assets as Asset[],
     savingsAccounts: d.savingsAccounts as SavingsAccount[],

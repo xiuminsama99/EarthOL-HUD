@@ -10,6 +10,7 @@
  */
 import type {
   CheckinInput,
+  CheckinMode,
   CheckinResult,
   HabitDirection,
   HabitState,
@@ -136,6 +137,15 @@ export function buildRestNote(habit: HabitState, identity: string | null): strin
 }
 
 /**
+ * 最低版本自动打卡语（R4）：状态差保底行动，目标未达成。
+ * 「无论如何都能完成」——保住今天，不丢养成进度。
+ */
+export function buildMinimalNote(habit: HabitState, identity: string | null): string {
+  const who = identity?.trim() ? identity.trim() : habit.name
+  return `状态不好也没关系，用最低版本保住了今天（我以${who}的身份行动）`
+}
+
+/**
  * 规则 9：打卡语约束。
  * note 未传（undefined）→ 自动生成（零输入）；传字符串 → trim 后必须非空。
  */
@@ -154,6 +164,7 @@ function hasNote(note: string): boolean {
 export function checkIn(input: CheckinInput): CheckinResult {
   const { habit, now, schedule, amount, note, restDay } = input
   const identity = input.identity ?? null
+  const mode: CheckinMode = input.mode ?? 'normal'
 
   const businessDate = resolveBusinessDate(now, schedule)
   const targetAmount = getDailyTarget(habit, businessDate)
@@ -163,6 +174,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     return {
       status: 'rejected',
       reason: 'missing-note',
+      mode,
       note: '',
       habit,
       targetAmount,
@@ -173,12 +185,13 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
   }
 
-  // 休息日：用假期币抵扣，不打卡、不计缺勤、不触发扣减
+  // 休息日：用假期币抵扣，不打卡、不计缺勤、不触发扣减（与 minimal 互斥，休息优先）
   if (restDay === true) {
     if (habit.vacationCoins <= 0) {
       return {
         status: 'rejected',
         reason: 'insufficient-vacation-coins',
+        mode: 'normal',
         note: '',
         habit,
         targetAmount,
@@ -190,6 +203,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
     return {
       status: 'rest-day',
+      mode: 'normal',
       // 休息日计入已处理业务日：次日不判缺勤、不触发动态扣减（规则 6）
       habit: {
         ...habit,
@@ -205,13 +219,38 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
   }
 
-  // 同一业务日重复打卡拒绝（防御性领域约束）
+  // 同一业务日重复打卡拒绝（防御性领域约束；minimal 同样防同日重复）
   if (habit.lastCheckinDate === businessDate) {
     return {
       status: 'rejected',
       reason: 'already-checked-in',
+      mode,
       note: '',
       habit,
+      targetAmount,
+      completedAmount: amount,
+      overAmount: 0,
+      vacationCoinsDelta: 0,
+      formed: habit.isFormed,
+    }
+  }
+
+  // ---- 最低版本（R4）：保底行动，目标未达成 ----
+  // 语义（设计已定案）：actionCount+1（记行动日）、totalAmount+amount（如实累计）、
+  // progressStep 不推进（明日目标不变）、formationDays 保持（不推进也不归零）、
+  // consistencyDays 不涨、无超额无假期币、lastCheckinDate 更新（防同日重复）。
+  if (mode === 'minimal') {
+    const nextHabit: HabitState = {
+      ...habit,
+      totalAmount: habit.totalAmount + amount,
+      actionCount: habit.actionCount + 1,
+      lastCheckinDate: businessDate,
+    }
+    return {
+      status: 'checked-in',
+      mode,
+      habit: nextHabit,
+      note: note !== undefined ? note.trim() : buildMinimalNote(habit, identity),
       targetAmount,
       completedAmount: amount,
       overAmount: 0,
@@ -266,6 +305,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
 
   return {
     status: 'checked-in',
+    mode,
     habit: nextHabit,
     note: finalNote,
     targetAmount,

@@ -720,3 +720,39 @@ describe('B6：习惯删除与改名', () => {
     expect(readHabit(storage).name).toBe('阅读') // 全部失败不落库
   })
 })
+
+describe('R4：最低版本打卡', () => {
+  it('performCheckin 透传 minimal：记录 mode=minimal，习惯 actionCount+1 且 progressStep 不动', () => {
+    const { deps, storage } = makeDeps()
+    createHabit(deps, {
+      name: '俯卧撑',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const habit = readHabit(storage)
+    const outcome = performCheckin(deps, habit, NOW, 'day', { amount: 1, mode: 'minimal' })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(outcome.result.mode).toBe('minimal')
+    expect(outcome.record).not.toBeNull()
+    expect(outcome.record!.mode).toBe('minimal')
+    expect(outcome.record!.restDay).toBe(false)
+    const saved = readHabit(storage)
+    expect(saved.actionCount).toBe(1)
+    expect(saved.progressStep).toBe(0)
+  })
+
+  it('normal 打卡记录 mode=normal', () => {
+    const { deps, storage } = makeDeps()
+    createHabit(deps, {
+      name: '俯卧撑',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const outcome = performCheckin(deps, readHabit(storage), NOW, 'day', { amount: 1 })
+    expect(outcome.record!.mode).toBe('normal')
+  })
+})

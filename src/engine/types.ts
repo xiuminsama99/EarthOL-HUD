@@ -14,6 +14,13 @@ export type HabitDirection = 'positive' | 'negative'
 /** 作息类型：白天工作 / 夜间工作（影响「今天」的业务日边界判定） */
 export type WorkSchedule = 'day' | 'night'
 
+/**
+ * 打卡模式（R4 最低版本）
+ * - normal：正常打卡（达标推进养成线 / 超额中断 + 存储假期币）
+ * - minimal：最低版本保底行动——状态差时保住今天（目标未达成，但不丢养成进度）
+ */
+export type CheckinMode = 'normal' | 'minimal'
+
 /** 超额警告：完成量超出当日目标时给出 */
 export interface OverachievementWarning {
   kind: 'overachievement'
@@ -70,6 +77,13 @@ export interface CheckinInput {
   identity?: string | null
   /** 今天是否用假期币抵扣休息（抵扣日不计缺勤、不触发动态扣减） */
   restDay?: boolean
+  /**
+   * 打卡模式（R4）：默认 normal。
+   * minimal = 最低版本保底行动：记行动日（actionCount+1、总量累计），
+   * 但目标未达成（progressStep 不推进、养成线不推进也不归零、无超额无币）。
+   * 与 restDay 互斥：restDay=true 时走休息分支（豁免），minimal 不生效。
+   */
+  mode?: CheckinMode
 }
 
 export type CheckinStatus = 'checked-in' | 'rest-day' | 'rejected'
@@ -90,6 +104,8 @@ export interface CheckinResult {
   status: CheckinStatus
   /** rejected 时给出原因 */
   reason?: RejectReason
+  /** 实际执行的打卡模式（rejected 时透传请求模式，rest-day 时恒为 normal） */
+  mode: CheckinMode
   /** 最终打卡语：自动生成文本或用户文本（rejected 时为 ''） */
   note: string
   /** 更新后的习惯状态（rejected 时等于原状态） */

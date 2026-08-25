@@ -19,6 +19,7 @@ function rec(over: Partial<CheckinRecord> = {}): CheckinRecord {
     targetAmount: 5,
     note: '今日打卡',
     restDay: false,
+    mode: 'normal',
     createdAt: '2026-08-25T10:00:00.000Z',
     ...over,
   }
@@ -169,5 +170,20 @@ describe('dateDiff 工具', () => {
   })
   it('跨年差正确', () => {
     expect(dateDiff('2026-12-31', '2027-01-01')).toBe(1)
+  })
+})
+
+describe('R4：minimal 最低版本分档', () => {
+  it('minimal 记录 → 1 档（行动但未达标，与缺勤归来同档）', () => {
+    const cells = computeHeatmap([rec({ mode: 'minimal', amount: 1, targetAmount: 5 })], '2026-08-25', 1)
+    const cell = cellOf(cells, '2026-08-25')
+    expect(cell.level).toBe(1)
+    expect(cell.isAction).toBe(true)
+    expect(cell.isRest).toBe(false)
+  })
+
+  it('minimal 且 amount === target 仍判 1 档（保底不是达标）', () => {
+    const cells = computeHeatmap([rec({ mode: 'minimal', amount: 1, targetAmount: 1 })], '2026-08-25', 1)
+    expect(cellOf(cells, '2026-08-25').level).toBe(1)
   })
 })

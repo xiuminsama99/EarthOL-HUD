@@ -130,7 +130,7 @@ describe('EarthStorage 数据层', () => {
   it('打卡记录：写入并按习惯过滤', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
-    const base = { amount: 5, targetAmount: 5, note: '今天我以玩家的身份读了 5 页', restDay: false, createdAt: '2026-08-25T00:00:00Z' }
+    const base = { amount: 5, targetAmount: 5, note: '今天我以玩家的身份读了 5 页', restDay: false, mode: 'normal' as const, createdAt: '2026-08-25T00:00:00Z' }
     s.addCheckin({ id: 'c1', habitId: 'h1', businessDate: '2026-08-25', ...base })
     s.addCheckin({ id: 'c2', habitId: 'h2', businessDate: '2026-08-25', ...base })
     expect(s.listCheckins()).toHaveLength(2)
@@ -358,5 +358,72 @@ describe('EarthStorage 数据层', () => {
     )
     const s = new EarthStorage(backend)
     expect(s.getProfile()?.auditScores).toBeNull()
+  })
+
+  it('R4：旧数据缺 mode 字段 → 读回规范化默认 normal', () => {
+    const { backend } = makeBackend()
+    // 直接写一份缺 mode 的旧数据（v2 时代的打卡记录形状）
+    backend.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: null,
+          habits: [],
+          checkins: [
+            {
+              id: 'c1',
+              habitId: 'h1',
+              businessDate: '2026-08-25',
+              amount: 5,
+              targetAmount: 5,
+              note: '旧数据',
+              restDay: false,
+              createdAt: '2026-08-25T00:00:00Z',
+            },
+          ],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    const rec = s.listCheckins()[0]
+    expect(rec.mode).toBe('normal') // 旧数据默认 normal
+  })
+
+  it('R4：minimal 记录保持 mode=minimal 不被规范化覆盖', () => {
+    const { backend } = makeBackend()
+    backend.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: null,
+          habits: [],
+          checkins: [
+            {
+              id: 'c1',
+              habitId: 'h1',
+              businessDate: '2026-08-25',
+              amount: 1,
+              targetAmount: 5,
+              note: '最低版本',
+              restDay: false,
+              mode: 'minimal',
+              createdAt: '2026-08-25T00:00:00Z',
+            },
+          ],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.listCheckins()[0]?.mode).toBe('minimal')
   })
 })

@@ -45,6 +45,7 @@ function makeCheckin(partial: Partial<CheckinRecord>): CheckinRecord {
     targetAmount: 1,
     note: '我以早起的人的身份完成了每天读一页书的第1次，离目标更近了一点点',
     restDay: false,
+    mode: 'normal',
     createdAt: '2026-01-13T10:00:00.000Z',
     ...partial,
   }

@@ -475,3 +475,100 @@ describe('防御性领域约束', () => {
     expect(dup.habit).toBe(first.habit)
   })
 })
+
+describe('R4：最低版本（minimal mode）', () => {
+  it('保底行动：actionCount+1、总量累计，但 progressStep/养成线/一致性均不动', () => {
+    const h = habit({
+      progressStep: 5,
+      formationDays: 9,
+      consistencyDays: 9,
+      totalAmount: 20,
+      actionCount: 8,
+      lastCheckinDate: '2026-01-12',
+    })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal' })
+    expect(r.status).toBe('checked-in')
+    expect(r.mode).toBe('minimal')
+    expect(r.habit.actionCount).toBe(9) // 行动日 +1
+    expect(r.habit.totalAmount).toBe(21) // 如实累计
+    expect(r.habit.progressStep).toBe(5) // 不推进（明日目标不变）
+    expect(r.habit.formationDays).toBe(9) // 保持：不推进也不归零
+    expect(r.habit.consistencyDays).toBe(9) // 不涨
+    expect(r.habit.vacationCoins).toBe(0) // 无币
+    expect(r.habit.lastCheckinDate).toBe('2026-01-13')
+    expect(r.warning).toBeUndefined() // 无超额警告
+    expect(r.overAmount).toBe(0)
+    expect(r.vacationCoinsDelta).toBe(0)
+    expect(r.formed).toBe(false)
+  })
+
+  it('打卡语自动生成（最低版本文案），身份未设置时兜底用习惯名', () => {
+    const h = habit({ progressStep: 5, actionCount: 8, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal' })
+    expect(r.note).toContain('状态不好也没关系，用最低版本保住了今天')
+    expect(r.note).toContain('测试习惯')
+  })
+
+  it('身份宣言存在时打卡语用身份', () => {
+    const h = habit({ lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal', identity: '健康的人' })
+    expect(r.note).toContain('我以健康的人的身份行动')
+  })
+
+  it('同日防重：minimal 后当天不能再打卡（normal 或 minimal 均拒绝）', () => {
+    const first = checkIn({ habit: habit({ lastCheckinDate: '2026-01-12' }), now: NOW, schedule: 'day', amount: 1, mode: 'minimal' })
+    expect(first.status).toBe('checked-in')
+    const dup = checkIn({ habit: first.habit, now: NOW, schedule: 'day', amount: 1 })
+    expect(dup.status).toBe('rejected')
+    expect(dup.reason).toBe('already-checked-in')
+  })
+
+  it('normal 打卡后当天不能再走 minimal（防重一致）', () => {
+    const first = checkIn({ habit: habit(), now: NOW, schedule: 'day', amount: 1, note: '今日达标' })
+    const dup = checkIn({ habit: first.habit, now: NOW, schedule: 'day', amount: 1, mode: 'minimal' })
+    expect(dup.status).toBe('rejected')
+    expect(dup.reason).toBe('already-checked-in')
+  })
+
+  it('次日恢复达标：养成线从保持的位置继续推进（不丢进度）', () => {
+    const minimal = checkIn({
+      habit: habit({ progressStep: 5, formationDays: 9, lastCheckinDate: '2026-01-12' }),
+      now: NOW,
+      schedule: 'day',
+      amount: 1,
+      mode: 'minimal',
+    })
+    // 次日（2026-01-14）达标打卡：目标 = 基准 1 + step 5 = 6
+    const next = checkIn({
+      habit: minimal.habit,
+      now: new Date(2026, 0, 14, 10, 0),
+      schedule: 'day',
+      amount: 6,
+    })
+    expect(next.status).toBe('checked-in')
+    expect(next.habit.formationDays).toBe(10) // 从保持的 9 继续 +1
+  })
+
+  it('restDay 优先：restDay=true 且 mode=minimal 时走休息分支（不记行动日）', () => {
+    const h = habit({ vacationCoins: 2, actionCount: 5, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal', restDay: true })
+    expect(r.status).toBe('rest-day')
+    expect(r.mode).toBe('normal')
+    expect(r.habit.actionCount).toBe(5)
+    expect(r.habit.vacationCoins).toBe(1)
+  })
+
+  it('minimal 不产生缺勤回退：次日目标从原位置继续', () => {
+    const h = habit({ progressStep: 5, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal' })
+    expect(r.status).toBe('checked-in')
+    expect(getDailyTarget(r.habit, '2026-01-14')).toBe(1 + 5) // 基准 1 + step 5，未回退未推进
+  })
+
+  it('rejected（note 为空串）时透出请求的 mode', () => {
+    const h = habit({ lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal', note: '   ' })
+    expect(r.status).toBe('rejected')
+    expect(r.mode).toBe('minimal')
+  })
+})

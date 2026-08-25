@@ -151,6 +151,11 @@ function HabitScreen() {
       return
     }
     bump()
+    if (result.mode === 'minimal') {
+      // 最低版本：保住今天，心情不动（无功无过）
+      setFeedback({ kind: 'ok', text: '最低版本保住今天 ✓ 不丢养成进度，明天从原目标继续' })
+      return
+    }
     // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
     const moodEvent: PetMoodEvent =
       (plan.backoffDays ?? 0) > 0
@@ -201,6 +206,11 @@ function HabitScreen() {
   const onOneTap = () => {
     if (!plan) return
     runCheckin({ amount: plan.target })
+  }
+
+  /** 最低版本（R4）：状态差保底行动，不丢养成进度 */
+  const onMinimalCheckin = () => {
+    runCheckin({ amount: 1, mode: 'minimal' })
   }
 
   const onRestDay = () => {
@@ -342,6 +352,7 @@ function HabitScreen() {
           error={error}
           feedback={feedback}
           onCheckin={onCheckin}
+          onMinimalCheckin={onMinimalCheckin}
           onRestDay={onRestDay}
           onLockCap={onLockCap}
           onRename={onRename}
@@ -398,6 +409,7 @@ interface HabitPanelProps {
   error: string | null
   feedback: Feedback | null
   onCheckin(): void
+  onMinimalCheckin(): void
   onRestDay(): void
   onLockCap(): void
   onRename(): void
@@ -580,6 +592,26 @@ function HabitPanel(props: HabitPanelProps) {
           休息
         </button>
       </div>
+
+      {/* 最低版本（R4）：状态差保底行动，不丢养成进度（防流失最后一道防线） */}
+      <button
+        type="button"
+        onClick={props.onMinimalCheckin}
+        title="状态差也没关系：做 1 个也算以身份行动，明天从原目标继续，养成进度不丢"
+        style={{
+          width: '100%',
+          marginTop: 8,
+          padding: '10px 0',
+          borderRadius: 8,
+          border: '1px solid #2c8a5a',
+          background: '#153a2c',
+          color: '#7ee0a8',
+          fontSize: 13,
+          cursor: 'pointer',
+        }}
+      >
+        今天状态差？用最低版本保底（不丢养成进度）
+      </button>
 
       <div
         style={{
