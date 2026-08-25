@@ -20,6 +20,9 @@ import {
   deleteHabit,
   renameHabit,
   switchSchedule,
+  habitBadgeLabel,
+  isPrefillableHabitDesc,
+  formatBusinessDateReadable,
   type CheckinOutcome,
   type HabitDeps,
 } from './habitFlow'
@@ -44,6 +47,52 @@ function readHabit(storage: EarthStorage): HabitState {
   expect(list.length).toBe(1)
   return list[0]
 }
+
+describe('R9 徽章文案（P1-1）：方向 + 人话标签', () => {
+  it('养成未固定：养成 · 每天只多一点点', () => {
+    expect(habitBadgeLabel('positive', false)).toBe('养成 · 每天只多一点点')
+  })
+
+  it('戒除未固定：戒除 · 每天少做一点点（方向不反）', () => {
+    expect(habitBadgeLabel('negative', false)).toBe('戒除 · 每天少做一点点')
+  })
+
+  it('锁定后：已固定，方向前缀保留', () => {
+    expect(habitBadgeLabel('positive', true)).toBe('养成 · 已固定')
+    expect(habitBadgeLabel('negative', true)).toBe('戒除 · 已固定')
+  })
+})
+
+describe('R9 引导坏习惯预填判定（P1-3）', () => {
+  it('null / 空白 → 不预填', () => {
+    expect(isPrefillableHabitDesc(null)).toBe(false)
+    expect(isPrefillableHabitDesc('   ')).toBe(false)
+  })
+
+  it('短描述（≤12 字）→ 可预填（名称简洁，如「熬夜刷手机」）', () => {
+    expect(isPrefillableHabitDesc('熬夜刷手机')).toBe(true)
+    expect(isPrefillableHabitDesc('少吃零食')).toBe(true)
+  })
+
+  it('长描述（>12 字，一整句话）→ 不预填，提示用模板', () => {
+    expect(isPrefillableHabitDesc('晚上躺床上刷手机到一两点才睡')).toBe(false)
+    expect(isPrefillableHabitDesc('总是忍不住买买买控制不住手')).toBe(false)
+  })
+})
+
+describe('R9 业务日人话化（P1-7）', () => {
+  it('YYYY-MM-DD → 「M 月 D 日 周X」', () => {
+    // 2026-01-13 是周二
+    expect(formatBusinessDateReadable('2026-01-13')).toBe('1 月 13 日 周二')
+    // 2026-09-01 是周二（UTC 口径与业务时区一致，不跨日）
+    expect(formatBusinessDateReadable('2026-09-01')).toBe('9 月 1 日 周二')
+  })
+
+  it('非法输入原样返回（防御）', () => {
+    expect(formatBusinessDateReadable('not-a-date')).toBe('not-a-date')
+    expect(formatBusinessDateReadable('')).toBe('')
+  })
+})
 
 describe('建习惯', () => {
   it('合法输入创建并持久化，初始状态符合领域约定', () => {

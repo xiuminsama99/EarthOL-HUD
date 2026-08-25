@@ -20,13 +20,26 @@ import {
   sendPetReminder,
   shouldRemind,
 } from '../pet/petReminder'
-import { createHabit, performCheckin, planToday, setCap, buildCheckinResultNotice, renameHabit, deleteHabit, switchSchedule } from './habitFlow'
+import {
+  createHabit,
+  performCheckin,
+  planToday,
+  setCap,
+  buildCheckinResultNotice,
+  renameHabit,
+  deleteHabit,
+  switchSchedule,
+  habitBadgeLabel,
+  isZeroTarget,
+  formatBusinessDateReadable,
+} from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { yearlyEffect } from './habitTemplates'
 import { computeScaleData } from '../scale/scaleFlow'
 import { ScalePanel } from '../scale/ScalePanel'
 import { HeatmapPanel } from '../heatmap/HeatmapPanel'
+import { updateIdentityAndGoal } from '../onboarding/onboardingFlow'
 
 const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
   day: '白天工作',
@@ -71,6 +84,10 @@ function HabitScreen() {
   const [renameInput, setRenameInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  /** P1-2：编辑身份/年度目标折叠区状态 */
+  const [editProfileOpen, setEditProfileOpen] = useState(false)
+  const [editIdentity, setEditIdentity] = useState('')
+  const [editGoal, setEditGoal] = useState('')
 
   /** R6：schedule 最新值供定时器闭包读取（interval 只注册一次） */
   const scheduleRef = useRef(schedule)
@@ -180,6 +197,35 @@ function HabitScreen() {
     () => (habit && businessDate ? habit.lastCheckinDate === businessDate : false),
     [habit, businessDate],
   )
+
+  /** P1-5：戒除类习惯目标触底 0 → 完成态（复用流程层判定） */
+  const zeroTarget = useMemo(
+    () => (habit && businessDate ? isZeroTarget(habit, businessDate) : false),
+    [habit, businessDate],
+  )
+
+  /** P1-2：打开编辑区时同步当前值 */
+  const openEditProfile = () => {
+    setEditIdentity(identity ?? '')
+    setEditGoal(annualGoal ?? '')
+    setEditProfileOpen(true)
+  }
+
+  /** P1-2：保存身份宣言 + 年度主线（复用引导校验口径） */
+  const onSaveProfile = () => {
+    setError(null)
+    const result = updateIdentityAndGoal({ storage: earthStorage }, {
+      identityStatement: editIdentity,
+      annualGoal: editGoal,
+    })
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    bump()
+    setEditProfileOpen(false)
+    setFeedback({ kind: 'ok', text: '身份与年度主线已更新，打卡语会跟着新身份走' })
+  }
 
   const bump = () => {
     setRefresh((v) => v + 1)
@@ -387,12 +433,12 @@ function HabitScreen() {
 
       {businessDate && <HeatmapPanel checkins={checkins} today={businessDate} />}
 
-      {/* UX-9：调试信息（时间源/业务日）移入默认折叠的设置区，用户语言化 */}
+      {/* UX-9：调试信息（时间校准/今天）移入默认折叠的设置区，用户语言化（P1-7） */}
       <details
         style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}
       >
         <summary style={{ fontSize: 13, color: '#8b8ba3', cursor: 'pointer', userSelect: 'none' }}>
-          设置（作息 · 宠物提醒）
+          设置（作息 · 宠物提醒 · 身份）
         </summary>
         <div style={{ marginTop: 10 }}>
           <div style={row}>
@@ -425,12 +471,62 @@ function HabitScreen() {
             <span style={{ fontSize: 11, color: '#5a5a74' }}>应用打开期间</span>
           </div>
           <div style={row}>
-            <span style={smallLabel}>时间源</span>
+            <span style={smallLabel}>时间校准</span>
             <span style={{ fontSize: 13 }}>{timeLabel}</span>
           </div>
           <div style={row}>
-            <span style={smallLabel}>业务日</span>
-            <span style={{ fontSize: 13 }}>{businessDate ?? '解析中…'}</span>
+            <span style={smallLabel}>今天</span>
+            <span style={{ fontSize: 13 }}>
+              {businessDate ? `（按网络时间）${formatBusinessDateReadable(businessDate)}` : '解析中…'}
+            </span>
+          </div>
+          <div style={{ borderTop: '1px solid #2c2c4a', marginTop: 8, paddingTop: 8 }}>
+            {!editProfileOpen ? (
+              <button
+                type="button"
+                onClick={openEditProfile}
+                style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}
+              >
+                编辑身份宣言 / 年度目标
+              </button>
+            ) : (
+              <div>
+                <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>身份宣言（我是…）</div>
+                <input
+                  type="text"
+                  maxLength={40}
+                  value={editIdentity}
+                  onChange={(e) => setEditIdentity(e.target.value)}
+                  placeholder="如：健康的人"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 14 }}
+                />
+                <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4, marginTop: 8 }}>年度主线（今年最想完成的一件事）</div>
+                <input
+                  type="text"
+                  maxLength={100}
+                  value={editGoal}
+                  onChange={(e) => setEditGoal(e.target.value)}
+                  placeholder="如：把身体练回二十岁的样子"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 14 }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={onSaveProfile}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', background: '#7c5cff', color: '#fff', fontSize: 13, cursor: 'pointer' }}
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditProfileOpen(false)}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 13, cursor: 'pointer' }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </details>
@@ -457,6 +553,7 @@ function HabitScreen() {
         <HabitPanel
           habit={habit}
           plan={plan}
+          todayChecked={todayChecked}
           autoNote={autoNote}
           annualGoal={annualGoal}
           amount={amount}
@@ -479,12 +576,13 @@ function HabitScreen() {
         />
       )}
 
-      {/* 底部固定「一键打卡」（工单 06）：一天只需要点一下；超额仍走卡片内快捷按钮 */}
+      {/* 底部固定「一键打卡」（工单 06）：一天只需要点一下；超额仍走卡片内快捷按钮
+          P1-5：戒除归 0 完成态下禁用，文案改为完成提示 */}
       {habit && plan && (
         <button
           type="button"
           onClick={onOneTap}
-          disabled={todayChecked}
+          disabled={todayChecked || zeroTarget}
           style={{
             position: 'fixed',
             bottom: 16,
@@ -494,16 +592,16 @@ function HabitScreen() {
             padding: '14px 0',
             borderRadius: 999,
             border: 'none',
-            background: todayChecked ? '#2c2c4a' : '#7c5cff',
-            color: todayChecked ? '#8b8ba3' : '#fff',
+            background: todayChecked || zeroTarget ? '#2c2c4a' : '#7c5cff',
+            color: todayChecked || zeroTarget ? '#8b8ba3' : '#fff',
             fontSize: 17,
             fontWeight: 700,
-            cursor: todayChecked ? 'default' : 'pointer',
-            boxShadow: todayChecked ? 'none' : '0 6px 20px rgba(124,92,255,0.35)',
+            cursor: todayChecked || zeroTarget ? 'default' : 'pointer',
+            boxShadow: todayChecked || zeroTarget ? 'none' : '0 6px 20px rgba(124,92,255,0.35)',
             zIndex: 10,
           }}
         >
-          {todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
+          {zeroTarget ? '已戒除完成 🎉' : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
         </button>
       )}
     </main>
@@ -513,6 +611,8 @@ function HabitScreen() {
 interface HabitPanelProps {
   habit: HabitState
   plan: ReturnType<typeof planToday>
+  /** P1-4：今日已打卡（或休息）→ 卡片内全部打卡入口置灰，与底部一键按钮状态一致 */
+  todayChecked: boolean
   /** 自动生成打卡语预览（默认展示，可确认或编辑覆盖） */
   autoNote: string
   /** 年度主线（三层目标第一层；有值时在习惯卡片展示归属） */
@@ -539,20 +639,20 @@ interface HabitPanelProps {
 
 function HabitPanel(props: HabitPanelProps) {
   const { habit, plan } = props
-  const directionLabel = habit.direction === 'positive' ? '养成' : '戒除'
   const annualGoal = props.annualGoal?.trim()
   /** UX-7：戒除类习惯目标触底 0 → 完成态 */
   const zeroTarget = plan.target === 0 && habit.direction === 'negative'
   /** UX-13：超额概念对戒除习惯无意义——只保留「刚好达标」快捷打卡 */
   const quickExtras = habit.direction === 'positive' ? [0, 1, 2, 5] : [0]
+  /** P1-4：今日已完成 → 全部打卡入口置灰 */
+  const done = props.todayChecked
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <h2 style={{ margin: 0, fontSize: 17 }}>{habit.name}</h2>
         <span style={{ fontSize: 12, color: '#8b8ba3', border: '1px solid #2c2c4a', borderRadius: 999, padding: '2px 10px' }}>
-          {directionLabel}
-          {plan.locked ? ' · 已固定' : ' · 每天只多一点点'}
+          {habitBadgeLabel(habit.direction, plan.locked)}
         </span>
       </div>
       <p style={{ color: '#8b8ba3', fontSize: 12, marginTop: 0 }}>
@@ -641,6 +741,7 @@ function HabitPanel(props: HabitPanelProps) {
             min={0}
             step={1}
             value={props.amount}
+            disabled={done}
             onChange={(e) => props.setAmount(e.target.value)}
             placeholder={`今日目标 ${plan.target}`}
             style={{
@@ -649,9 +750,10 @@ function HabitPanel(props: HabitPanelProps) {
               padding: '10px 12px',
               borderRadius: 8,
               border: '1px solid #2c2c4a',
-              background: '#1b1b33',
-              color: '#e5e5f0',
+              background: done ? '#1b1b33' : '#1b1b33',
+              color: done ? '#5a5a74' : '#e5e5f0',
               fontSize: 16,
+              opacity: done ? 0.55 : 1,
             }}
           />
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -659,16 +761,17 @@ function HabitPanel(props: HabitPanelProps) {
               <button
                 key={extra}
                 type="button"
+                disabled={done}
                 onClick={() => props.onQuickCheckin(plan.target + extra)}
                 style={{
                   flex: 1,
                   padding: '6px 0',
                   borderRadius: 6,
                   border: '1px solid #2c2c4a',
-                  background: '#1b1b33',
-                  color: extra === 0 ? '#e5e5f0' : '#d9b64a',
+                  background: done ? '#2c2c4a' : '#1b1b33',
+                  color: done ? '#5a5a74' : extra === 0 ? '#e5e5f0' : '#d9b64a',
                   fontSize: 12,
-                  cursor: 'pointer',
+                  cursor: done ? 'default' : 'pointer',
                 }}
               >
                 {extra === 0 ? '刚好达标' : `多做了 ${extra} 个（不建议）`}
@@ -721,17 +824,18 @@ function HabitPanel(props: HabitPanelProps) {
         {!zeroTarget && (
           <button
             type="button"
+            disabled={done}
             onClick={props.onCheckin}
             style={{
               flex: 1,
               padding: '12px',
               borderRadius: 8,
               border: 'none',
-              background: '#7c5cff',
-              color: '#fff',
+              background: done ? '#2c2c4a' : '#7c5cff',
+              color: done ? '#5a5a74' : '#fff',
               fontSize: 16,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: done ? 'default' : 'pointer',
             }}
           >
             按输入量打卡
@@ -739,16 +843,17 @@ function HabitPanel(props: HabitPanelProps) {
         )}
         <button
           type="button"
+          disabled={done}
           onClick={props.onRestDay}
           title="消耗 1 张休息券，今日不打卡也不缺勤；没有券时点按会提示如何获取"
           style={{
             padding: '12px 14px',
             borderRadius: 8,
             border: '1px solid #2c2c4a',
-            background: '#1b1b33',
-            color: '#e5e5f0',
+            background: done ? '#2c2c4a' : '#1b1b33',
+            color: done ? '#5a5a74' : '#e5e5f0',
             fontSize: 14,
-            cursor: 'pointer',
+            cursor: done ? 'default' : 'pointer',
           }}
         >
           休息
@@ -764,6 +869,7 @@ function HabitPanel(props: HabitPanelProps) {
       {/* 最低版本（R4 + UX-12/14 人话化）：状态差保底行动，不丢养成进度（防流失最后一道防线） */}
       <button
         type="button"
+        disabled={done}
         onClick={props.onMinimalCheckin}
         title="状态差也没关系：做 1 个也算行动，明天从原目标继续，养成进度不丢"
         style={{
@@ -772,10 +878,10 @@ function HabitPanel(props: HabitPanelProps) {
           padding: '10px 0',
           borderRadius: 8,
           border: '1px solid #2c8a5a',
-          background: '#153a2c',
-          color: '#7ee0a8',
+          background: done ? '#2c2c4a' : '#153a2c',
+          color: done ? '#5a5a74' : '#7ee0a8',
           fontSize: 13,
-          cursor: 'pointer',
+          cursor: done ? 'default' : 'pointer',
         }}
       >
         今天太累了？做 1 个就算数（不丢进度）
@@ -827,7 +933,7 @@ function HabitPanel(props: HabitPanelProps) {
               cursor: 'pointer',
             }}
           >
-            {plan.locked ? '调整' : '定死'}
+            {plan.locked ? '调整' : '固定'}
           </button>
         </div>
       </div>

@@ -28,6 +28,40 @@ export interface OnboardingDeps {
   storage: Pick<EarthStorage, 'getProfile' | 'updateProfile'>
 }
 
+/** 主界面编辑身份/年度主线输入（P1-2：兑现引导「之后也能随时补充」承诺） */
+export interface IdentityEditInput {
+  /** 身份宣言「我是___」（必填，≤40 字） */
+  identityStatement: string
+  /** 年度主线（可选，≤100 字） */
+  annualGoal: string
+}
+
+/**
+ * 主界面编辑身份宣言 + 年度主线（P1-2）。
+ * 复用引导的校验口径（身份必填 ≤40 字、年度主线 ≤100 字），
+ * 只更新这两个字段，不动引导产出的其他字段。
+ */
+export function updateIdentityAndGoal(
+  deps: OnboardingDeps,
+  input: IdentityEditInput,
+): OnboardingResult {
+  const identity = input.identityStatement.trim()
+  if (identity.length === 0) {
+    return { profile: null, error: '身份宣言不能为空：告诉我你想成为什么样的人' }
+  }
+  if (identity.length > 40) {
+    return { profile: null, error: '身份宣言最长 40 字，一句话说清楚' }
+  }
+  if (input.annualGoal.trim().length > 100) {
+    return { profile: null, error: '年度主线最长 100 字，一句话说清楚' }
+  }
+  const profile = deps.storage.updateProfile({
+    identityStatement: identity,
+    annualGoal: input.annualGoal.trim() || null,
+  })
+  return { profile, error: null }
+}
+
 export interface OnboardingResult {
   profile: PlayerProfile | null
   error: string | null

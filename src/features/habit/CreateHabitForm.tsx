@@ -8,6 +8,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { HabitDirection } from '../../engine/types'
 import type { NewHabitInput } from './habitFlow'
+import { isPrefillableHabitDesc } from './habitFlow'
 import { HABIT_TEMPLATES, UNIT_OPTIONS } from './habitTemplates'
 import type { HabitTemplate } from './habitTemplates'
 
@@ -45,7 +46,9 @@ const inputStyle: React.CSSProperties = {
 }
 
 export function CreateHabitForm(props: CreateHabitFormProps) {
-  const [name, setName] = useState(props.initialName ?? '')
+  /** P1-3：引导坏习惯描述太长（>12 字，通常是一整句话）时不再自动填名称，改为提示 */
+  const prefillable = props.initialName !== undefined && isPrefillableHabitDesc(props.initialName)
+  const [name, setName] = useState(prefillable ? (props.initialName ?? '').trim() : '')
   const [direction, setDirection] = useState<HabitDirection>(props.initialDirection ?? 'positive')
   const [baseAmount, setBaseAmount] = useState('1')
   const [cap, setCap] = useState('')
@@ -177,9 +180,14 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
           placeholder="如：每天读一页书 / 每天少吃一口"
           maxLength={40}
         />
-        {props.initialName && !nameTouched && (
+        {prefillable && !nameTouched && (
           <span style={{ fontSize: 11, color: '#d9b64a', marginTop: 4 }}>
             来自你的引导记录：{props.initialName}
+          </span>
+        )}
+        {props.initialName && !prefillable && !nameTouched && (
+          <span style={{ fontSize: 11, color: '#d9b64a', marginTop: 4 }}>
+            你的引导记录写的是「{props.initialName}」——有点长，建议用模板或起个简短的名字
           </span>
         )}
       </div>

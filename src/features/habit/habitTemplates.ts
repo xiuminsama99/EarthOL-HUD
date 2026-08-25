@@ -44,7 +44,7 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
     direction: 'positive',
     baseAmount: 100,
     unit: '步',
-    tip: '从 100 步开始，走到你觉得舒服就定死',
+    tip: '从 100 步开始，走到你觉得舒服就固定',
   },
   {
     id: 'less-snack',

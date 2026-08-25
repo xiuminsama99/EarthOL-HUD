@@ -8,6 +8,41 @@
  * EarthStorage 与固定时间即可覆盖完整流程（建习惯 → 打卡 → 锁死 → 超额）。
  */
 import { checkIn, getDailyTarget, lockCap, resolveBusinessDate } from '../../engine/engine'
+
+/** 徽章文案（P1-1）：方向 + 等差数列/固定态的人话标签，UI 直接消费 */
+export function habitBadgeLabel(direction: HabitDirection, locked: boolean): string {
+  const dir = direction === 'positive' ? '养成' : '戒除'
+  if (locked) return `${dir} · 已固定`
+  return `${dir} · ${direction === 'positive' ? '每天只多一点点' : '每天少做一点点'}`
+}
+
+/**
+ * 引导坏习惯描述是否可直接预填为习惯名（P1-3）：
+ * 描述过长（>12 字）时通常是一整句话（如「晚上躺床上刷手机到一两点」），
+ * 不适合直接当习惯名，UI 改为提示用户用模板或起个简短名字。
+ */
+export function isPrefillableHabitDesc(desc: string | null): boolean {
+  if (desc === null) return false
+  const trimmed = desc.trim()
+  return trimmed.length > 0 && trimmed.length <= 12
+}
+
+/** 周几标签（0=周日 … 6=周六） */
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/**
+ * 业务日人话化（P1-7）：YYYY-MM-DD → 「9 月 1 日 周二」。
+ * 业务日为业务时区（Asia/Shanghai）的日期，UTC 日历与该时区不跨日（+8），
+ * 用 UTC 解析星期无时区歧义（与 heatmapFlow 同口径）。
+ */
+export function formatBusinessDateReadable(date: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!m) return date
+  const month = Number(m[2])
+  const day = Number(m[3])
+  const weekday = new Date(Date.UTC(Number(m[1]), month - 1, day)).getUTCDay()
+  return `${month} 月 ${day} 日 ${WEEKDAY_LABELS[weekday]}`
+}
 import type {
   CheckinInput,
   CheckinResult,

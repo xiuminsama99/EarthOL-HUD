@@ -13,6 +13,7 @@ import {
   isValidAuditScores,
   lowestAuditDimension,
   submitOnboarding,
+  updateIdentityAndGoal,
 } from './onboardingFlow'
 
 function makeBackend() {
@@ -58,6 +59,71 @@ const validInput = {
   annualGoal: '把身体练回二十岁的样子',
   auditScores: null as AuditScores | null,
 }
+
+describe('R9 主界面编辑身份/年度主线（P1-2：兑现「之后也能随时补充」承诺）', () => {
+  it('保存：身份与年度主线更新，其余字段不受影响', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    submitOnboarding(
+      { storage: s },
+      { ...validInput, identityStatement: '我是健康的人', annualGoal: '把身体练回二十岁的样子' },
+    )
+    const before = s.getProfile()!
+    const result = updateIdentityAndGoal(
+      { storage: s },
+      { identityStatement: '我是早起的人', annualGoal: '跑完第一个马拉松' },
+    )
+    expect(result.error).toBeNull()
+    const after = s.getProfile()!
+    expect(after.identityStatement).toBe('我是早起的人')
+    expect(after.annualGoal).toBe('跑完第一个马拉松')
+    // 其余字段原样保留（vision/antivision/badHabitDesc/auditScores 不变）
+    expect(after.vision).toBe(before.vision)
+    expect(after.antivision).toBe(before.antivision)
+    expect(after.badHabitDesc).toBe(before.badHabitDesc)
+    expect(after.auditScores).toEqual(before.auditScores)
+    expect(after.schedule).toBe(before.schedule)
+  })
+
+  it('身份宣言必填：空白拒绝且不落库', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    submitOnboarding({ storage: s }, validInput)
+    const result = updateIdentityAndGoal(
+      { storage: s },
+      { identityStatement: '   ', annualGoal: '任意目标' },
+    )
+    expect(result.error).toContain('不能为空')
+    expect(s.getProfile()?.identityStatement).toBe('我是健康的人') // 未改动
+  })
+
+  it('身份宣言超长（>40 字）/ 年度主线超长（>100 字）拒绝且不落库', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    submitOnboarding({ storage: s }, validInput)
+    expect(
+      updateIdentityAndGoal({ storage: s }, { identityStatement: '我'.repeat(41), annualGoal: '' }).error,
+    ).toContain('最长 40 字')
+    expect(
+      updateIdentityAndGoal({ storage: s }, { identityStatement: '我是健康的人', annualGoal: '长'.repeat(101) }).error,
+    ).toContain('最长 100 字')
+    expect(s.getProfile()?.identityStatement).toBe('我是健康的人')
+    expect(s.getProfile()?.annualGoal).toBe(validInput.annualGoal)
+  })
+
+  it('年度主线清空：归一为 null（允许删除年度目标）', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    submitOnboarding({ storage: s }, { ...validInput, annualGoal: '把身体练回二十岁的样子' })
+    const result = updateIdentityAndGoal(
+      { storage: s },
+      { identityStatement: '我是健康的人', annualGoal: '   ' },
+    )
+    expect(result.error).toBeNull()
+    expect(s.getProfile()?.annualGoal).toBeNull()
+    expect(s.getProfile()?.identityStatement).toBe('我是健康的人')
+  })
+})
 
 describe('onboardingFlow 引导流程', () => {
   it('完成引导：全部字段写入档案并可回读', () => {
