@@ -1,0 +1,32 @@
+{
+  "name": "earthol-hud",
+  "private": true,
+  "version": "0.1.0",
+  "description": "地球online玩家控制台——把 Dan Koe 一日重启方法论产品化的微习惯引擎与玩家面板",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiuminsama99/EarthOL-HUD.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "oxlint": "^1.79.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}
