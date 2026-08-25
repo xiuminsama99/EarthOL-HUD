@@ -19,6 +19,7 @@ import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { computeScaleData } from '../scale/scaleFlow'
 import { ScalePanel } from '../scale/ScalePanel'
+import { HeatmapPanel } from '../heatmap/HeatmapPanel'
 
 const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
   day: '白天工作',
@@ -282,6 +283,8 @@ function HabitScreen() {
         identity={identity}
         vision={vision}
       />
+
+      {businessDate && <HeatmapPanel checkins={checkins} today={businessDate} />}
 
       <div style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}>
         <div style={row}>
