@@ -186,7 +186,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
     })
     return (
       <main style={panel}>
-        <StepHeader step={2} total={6} title="人生审计：先看清现在的自己" />
+        <StepHeader step={1} total={6} title="人生审计：先看清现在的自己" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           给现在的自己打个分（1-10，越满意越高）。<strong style={{ color: '#ffd27a' }}>最低分的地方，就是改变最见效的地方</strong>——
           它告诉你该从哪里开始。
@@ -238,7 +238,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 2) {
     return (
       <main style={panel}>
-        <StepHeader step={3} total={6} title="先看清你最怕什么" />
+        <StepHeader step={2} total={6} title="先看清你最怕什么" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           用大白话写下来：<strong style={{ color: '#ffd27a' }}>5 年后如果什么都不改，我的一个普通周二会怎样？</strong>
           写得越具体越好——恐惧比欲望更会推着你行动。
@@ -273,7 +273,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 3) {
     return (
       <main style={panel}>
-        <StepHeader step={4} total={6} title="你要成为谁？" />
+        <StepHeader step={3} total={6} title="你要成为谁？" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           不是「我要减肥」，而是「我是健康的人」——行为是身份的结果。用一句大白话填完这句：
         </p>
@@ -320,7 +320,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 4) {
     return (
       <main style={panel}>
-        <StepHeader step={5} total={6} title="今年，你最想完成的一件事？" />
+        <StepHeader step={4} total={6} title="今年，你最想完成的一件事？" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           身份有了方向，再给它一个目标。不用多，<strong style={{ color: '#7ee0a8' }}>一年就这一件事</strong>——
           之后每天的微小习惯，都是朝着它迈出的一步。
@@ -363,7 +363,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
         : AUDIT_SUGGESTIONS[lowestAuditDimension(audit).key]
     return (
       <main style={panel}>
-        <StepHeader step={6} total={6} title="你想从哪件事开始？" />
+        <StepHeader step={5} total={6} title="你想从哪件事开始？" />
         {auditTip && (
           <div
             style={{

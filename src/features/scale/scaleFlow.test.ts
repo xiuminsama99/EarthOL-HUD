@@ -58,6 +58,7 @@ describe('空数据', () => {
     expect(scale.actionDays).toBe(0)
     expect(scale.actionCount).toBe(0)
     expect(scale.totalAmount).toBe(0)
+    expect(scale.unit).toBe('次')
     expect(scale.achievedRate).toBeNull()
     expect(scale.leftValue).toBe(0)
     expect(scale.rightValue).toBe(DESIRE_BASELINE_DAYS)
@@ -112,6 +113,15 @@ describe('目标达成率与总量', () => {
       makeHabit({ id: 'h2', totalAmount: 30 }),
     ]
     expect(computeScaleData(habits, []).totalAmount).toBe(42)
+  })
+
+  it('UX-8：累计总量单位取首个习惯的 unit（无习惯默认「次」）', () => {
+    const habits = [
+      makeHabit({ id: 'h1', unit: '个' }),
+      makeHabit({ id: 'h2', unit: '页' }),
+    ]
+    expect(computeScaleData(habits, []).unit).toBe('个')
+    expect(computeScaleData([], []).unit).toBe('次')
   })
 })
 

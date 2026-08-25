@@ -20,7 +20,7 @@ import {
   sendPetReminder,
   shouldRemind,
 } from '../pet/petReminder'
-import { createHabit, performCheckin, planToday, setCap, buildOverachievementNotice, renameHabit, deleteHabit } from './habitFlow'
+import { createHabit, performCheckin, planToday, setCap, buildCheckinResultNotice, renameHabit, deleteHabit } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { yearlyEffect } from './habitTemplates'
@@ -35,9 +35,9 @@ const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
 
 const REJECT_LABEL: Record<RejectReason, string> = {
   'missing-note': '打卡记录不能为空',
-  'insufficient-vacation-coins': '假期币不足，今天还不能休息',
+  'insufficient-vacation-coins': '假期币不足：超额打卡可存假期币，存 1 枚即可休息',
   'already-checked-in': '今天已经打过卡了，明天再来',
-  'schedule-switched-today': '今天已切换过作息类型，不能再次打卡（防作弊）',
+  'schedule-switched-today': '今天已切换过作息类型，今天不能再打卡',
 }
 
 interface Feedback {
@@ -217,26 +217,21 @@ function HabitScreen() {
           ? 'checkin-extra'
           : 'checkin'
     recordPetMood({ storage: earthStorage }, moodEvent)
-    if (result.warning) {
-      setFeedback({
-        kind: 'warn',
-        text: buildOverachievementNotice(
-          result.overAmount,
-          result.vacationCoinsDelta,
-          result.habit.vacationCoins,
-        ),
-      })
-    } else {
-      setFeedback({ kind: 'ok', text: '今日达标 ✓ 以新身份行动的一天' })
-    }
+    // UX-1：按真实完成量分叉反馈（达标 / 未达标 / 超额），不虚假成功
+    setFeedback({
+      kind: result.warning ? 'warn' : 'ok',
+      text: buildCheckinResultNotice(result),
+    })
   }
 
   const toggleSchedule = () => {
     const next: WorkSchedule = schedule === 'day' ? 'night' : 'day'
-    // B1：记录切换时刻，切换当天禁止再次打卡（防切昼夜刷卡）
+    // B1：记录切换时刻，切换当天禁止再次打卡（防切昼夜刷卡）；窗口确认避免误触锁死当天
+    const confirmed = window.confirm('切换作息后今天不能再打卡，确定吗？')
+    if (!confirmed) return
     earthStorage.updateProfile({ schedule: next, lastScheduleSwitchAt: new Date().toISOString() })
     setSchedule(next)
-    setError('作息类型已切换为「' + SCHEDULE_LABEL[next] + '」，今天不能再打卡（防作弊）')
+    setError(`已切换为${SCHEDULE_LABEL[next]}，明天起按新作息计算`)
   }
 
   /** R6：宠物提醒开关（开启时请求通知权限；拒绝则保持关闭） */
@@ -280,9 +275,14 @@ function HabitScreen() {
   }
 
   const onCheckin = () => {
+    const value = Number(amount)
+    // UX-1：拒绝空/0 完成量（引擎 0 是合法语义，此处拦截误操作；反向触底的一键打卡走 onOneTap 不受影响）
+    if (!Number.isInteger(value) || value < 1) {
+      setError('完成量至少 1')
+      return
+    }
     runCheckin({
-      // 零输入体验：打卡语为空时交给引擎自动生成
-      amount: Number(amount),
+      amount: value,
       note: note.trim() === '' ? undefined : note,
     })
   }
@@ -381,45 +381,53 @@ function HabitScreen() {
 
       {businessDate && <HeatmapPanel checkins={checkins} today={businessDate} />}
 
-      <div style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}>
-        <div style={row}>
-          <span style={smallLabel}>时间源</span>
-          <span style={{ fontSize: 13 }}>{timeLabel}</span>
+      {/* UX-9：调试信息（时间源/业务日）移入默认折叠的设置区，用户语言化 */}
+      <details
+        style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}
+      >
+        <summary style={{ fontSize: 13, color: '#8b8ba3', cursor: 'pointer', userSelect: 'none' }}>
+          设置（作息 · 宠物提醒）
+        </summary>
+        <div style={{ marginTop: 10 }}>
+          <div style={row}>
+            <span style={smallLabel}>作息</span>
+            <button
+              type="button"
+              onClick={toggleSchedule}
+              style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
+            >
+              {SCHEDULE_LABEL[schedule]}
+            </button>
+          </div>
+          <div style={row}>
+            <span style={smallLabel}>宠物提醒</span>
+            <button
+              type="button"
+              onClick={onToggleReminder}
+              style={{ background: reminderEnabled ? '#153a2c' : '#1b1b33', color: reminderEnabled ? '#7ee0a8' : '#e5e5f0', border: `1px solid ${reminderEnabled ? '#2c8a5a' : '#2c2c4a'}`, borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
+            >
+              {reminderEnabled ? '已开启' : '已关闭'}
+            </button>
+            {reminderEnabled && (
+              <input
+                type="time"
+                value={reminderTime}
+                onChange={(e) => onReminderTimeChange(e.target.value)}
+                style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}
+              />
+            )}
+            <span style={{ fontSize: 11, color: '#5a5a74' }}>应用打开期间</span>
+          </div>
+          <div style={row}>
+            <span style={smallLabel}>时间源</span>
+            <span style={{ fontSize: 13 }}>{timeLabel}</span>
+          </div>
+          <div style={row}>
+            <span style={smallLabel}>业务日</span>
+            <span style={{ fontSize: 13 }}>{businessDate ?? '解析中…'}</span>
+          </div>
         </div>
-        <div style={row}>
-          <span style={smallLabel}>业务日</span>
-          <span style={{ fontSize: 13 }}>{businessDate ?? '解析中…'}</span>
-        </div>
-        <div style={row}>
-          <span style={smallLabel}>作息</span>
-          <button
-            type="button"
-            onClick={toggleSchedule}
-            style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
-          >
-            {SCHEDULE_LABEL[schedule]}
-          </button>
-        </div>
-        <div style={row}>
-          <span style={smallLabel}>宠物提醒</span>
-          <button
-            type="button"
-            onClick={onToggleReminder}
-            style={{ background: reminderEnabled ? '#153a2c' : '#1b1b33', color: reminderEnabled ? '#7ee0a8' : '#e5e5f0', border: `1px solid ${reminderEnabled ? '#2c8a5a' : '#2c2c4a'}`, borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
-          >
-            {reminderEnabled ? '已开启' : '已关闭'}
-          </button>
-          {reminderEnabled && (
-            <input
-              type="time"
-              value={reminderTime}
-              onChange={(e) => onReminderTimeChange(e.target.value)}
-              style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}
-            />
-          )}
-          <span style={{ fontSize: 11, color: '#5a5a74' }}>应用打开期间</span>
-        </div>
-      </div>
+      </details>
 
       {!businessDate ? (
         <div
@@ -524,6 +532,8 @@ function HabitPanel(props: HabitPanelProps) {
   const { habit, plan } = props
   const directionLabel = habit.direction === 'positive' ? '养成' : '戒除'
   const annualGoal = props.annualGoal?.trim()
+  /** UX-7：戒除类习惯目标触底 0 → 完成态 */
+  const zeroTarget = plan.target === 0 && habit.direction === 'negative'
 
   return (
     <div>
@@ -546,24 +556,39 @@ function HabitPanel(props: HabitPanelProps) {
       )}
 
       <div style={{ background: '#1b1b33', borderRadius: 10, padding: 16, textAlign: 'center', marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: '#8b8ba3' }}>今日目标</div>
-        <div style={{ fontSize: 42, fontWeight: 700, lineHeight: 1.2 }}>{plan.target}</div>
-        {plan.backoffDays > 0 && (
-          <div style={{ fontSize: 12, color: '#d9b64a' }}>
-            缺勤 {plan.backoffDays} 天，目标已回退（不退零，从当前位置继续）
+        {zeroTarget ? (
+          <div style={{ fontSize: 15, color: '#7ee0a8', lineHeight: 1.6 }}>
+            已戒除到 0，恭喜！
+            <br />
+            可以定死为 0 或换个新习惯
           </div>
-        )}
-        {!plan.locked && (
-          <div style={{ fontSize: 12, color: '#8b8ba3', marginTop: 4 }}>
-            明日目标 {plan.tomorrowTarget}
-          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: '#8b8ba3' }}>今日目标</div>
+            <div style={{ fontSize: 42, fontWeight: 700, lineHeight: 1.2 }}>{plan.target}</div>
+            {plan.backoffDays > 0 && (
+              <div style={{ fontSize: 12, color: '#d9b64a' }}>
+                缺勤 {plan.backoffDays} 天，目标已回退（不退零，从当前位置继续）
+              </div>
+            )}
+            {!plan.locked && (
+              <div style={{ fontSize: 12, color: '#8b8ba3', marginTop: 4 }}>
+                明日目标 {plan.tomorrowTarget}
+              </div>
+            )}
+          </>
         )}
       </div>
 
+      {/* UX-3：养成进度（不做 streak 叙事，与产品哲学一致）；缺勤归来如实解释重置 */}
       <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 6 }}>
-        养成线 {habit.formationDays}/{FORMED_DAYS}
-        {habit.formationDays > 0 && ` · 连续 ${habit.formationDays} 天达标`}
+        养成进度 {habit.formationDays}/{FORMED_DAYS}
       </div>
+      {plan.backoffDays > 0 && (
+        <div style={{ fontSize: 12, color: '#d9b64a', marginBottom: 6 }}>
+          缺勤会重置养成进度，从第 1 天重新计——没关系，继续就是
+        </div>
+      )}
 
       {/* R5：年度累计效果（持续激励：按当前目标量换算 365 天总量） */}
       <p
@@ -574,7 +599,7 @@ function HabitPanel(props: HabitPanelProps) {
           fontWeight: 600,
         }}
       >
-        {yearlyEffect(plan.target, habit.unit)}，坚持就会抵达
+        {zeroTarget ? '已达成 🎉' : `${yearlyEffect(plan.target, habit.unit)}，坚持就会抵达`}
       </p>
 
       {props.feedback && (
@@ -693,16 +718,15 @@ function HabitPanel(props: HabitPanelProps) {
         <button
           type="button"
           onClick={props.onRestDay}
-          disabled={habit.vacationCoins <= 0}
-          title={habit.vacationCoins > 0 ? '消耗 1 枚假期币，今日不打卡也不缺勤' : '需要假期币'}
+          title="消耗 1 枚假期币，今日不打卡也不缺勤；没有币时点按会提示如何获取"
           style={{
             padding: '12px 14px',
             borderRadius: 8,
             border: '1px solid #2c2c4a',
             background: '#1b1b33',
-            color: habit.vacationCoins > 0 ? '#e5e5f0' : '#5a5a74',
+            color: '#e5e5f0',
             fontSize: 14,
-            cursor: habit.vacationCoins > 0 ? 'pointer' : 'not-allowed',
+            cursor: 'pointer',
           }}
         >
           休息

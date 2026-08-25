@@ -109,6 +109,19 @@ describe('NetworkTimeProvider', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1)
   })
 
+  it('UX-10：并行请求全部端点，取最快成功者', async () => {
+    // e1 永不完成（模拟慢端点），e2 立即成功 → 并行下 e2 先到，refresh 不再等 e1
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === 'https://e1') return new Promise<Response>(() => {})
+      return makeResponse(DATE_HEADER)
+    })
+    const p = new NetworkTimeProvider({ endpoints: ['https://e1', 'https://e2'], fetchFn })
+    const s = await p.refresh()
+    expect(s.endpoint).toBe('https://e2')
+    expect(fetchFn).toHaveBeenCalledTimes(2) // 两个端点同时被调用（并发，非串行）
+  })
+
   it('lastSource 同步返回最近一次解析结果', async () => {
     const fetchFn = vi.fn(async () => makeResponse(DATE_HEADER))
     const p = new NetworkTimeProvider({ endpoints: ['https://e1'], fetchFn })

@@ -81,20 +81,25 @@ export class NetworkTimeProvider implements TimeProvider {
   }
 
   async refresh(): Promise<TimeSource> {
-    for (const endpoint of this.endpoints) {
+    // UX-10：并行请求全部端点，取最快成功者（弱网首屏不再串行最长 12s）
+    const attempts = this.endpoints.map(async (endpoint) => {
       const source = await this.tryEndpoint(endpoint)
-      if (source) {
-        this.last = source
-        return source
+      if (!source) throw new Error(`no time from ${endpoint}`)
+      return source
+    })
+    try {
+      const source = await Promise.any(attempts)
+      this.last = source
+      return source
+    } catch {
+      const source: TimeSource = {
+        now: new Date(),
+        source: 'device',
+        fetchedAt: new Date(),
       }
+      this.last = source
+      return source
     }
-    const source: TimeSource = {
-      now: new Date(),
-      source: 'device',
-      fetchedAt: new Date(),
-    }
-    this.last = source
-    return source
   }
 
   lastSource(): TimeSource | null {

@@ -103,6 +103,43 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
   return { habit, error: null }
 }
 
+/**
+ * 超额反馈提示（A5 明确养成线中断 + B3 文案区分"存入的币"与"真实超额量"）。
+ * 超额产生的币上限 = 当日目标量，因此超额量中只有部分转为假期币。
+ */
+export function buildOverachievementNotice(
+  overAmount: number,
+  coinsGained: number,
+  vacationCoins: number,
+): string {
+  return `超额 ${overAmount} 中 ${coinsGained} 已存为假期币（当前 ${vacationCoins} 枚）——超额当天不计入养成进度`
+}
+
+/**
+ * 打卡结果反馈文案（UX-1：不虚假成功——按真实完成量分叉）。
+ * - 超额：不建议 + 假期币（走 buildOverachievementNotice）
+ * - 未达标：如实告知「做了 X / 目标 Y」（不计入养成线）
+ * - 达标：庆祝
+ */
+export function buildCheckinResultNotice(result: CheckinResult): string {
+  if (result.warning) {
+    return buildOverachievementNotice(
+      result.overAmount,
+      result.vacationCoinsDelta,
+      result.habit.vacationCoins,
+    )
+  }
+  if (result.completedAmount < result.targetAmount) {
+    return `做了 ${result.completedAmount} / 目标 ${result.targetAmount}，明天继续（未达标当天不计入养成线）`
+  }
+  return '今日达标 ✓ 以新身份行动的一天'
+}
+
+/** UX-7：戒除类习惯目标触底 0（已完成判定，UI 展示完成态用） */
+export function isZeroTarget(habit: HabitState, businessDate: string): boolean {
+  return habit.direction === 'negative' && getDailyTarget(habit, businessDate) === 0
+}
+
 /** 今日计划：目标量 + 明日目标 + 缺勤回退信息（展示用） */
 export interface TodayPlan {
   target: number
@@ -222,17 +259,7 @@ export function performCheckin(
   return { result, record }
 }
 
-/**
- * 超额反馈提示（A5 明确养成线中断 + B3 文案区分"存入的币"与"真实超额量"）。
- * 超额产生的币上限 = 当日目标量，因此超额量中只有部分转为假期币。
- */
-export function buildOverachievementNotice(
-  overAmount: number,
-  coinsGained: number,
-  vacationCoins: number,
-): string {
-  return `不建议，离目标更远，超额 ${overAmount} 中 ${coinsGained} 已存为假期币（当前 ${vacationCoins} 枚）。超额当天不计入养成线，连续养成已重新计数`
-}
+
 
 /** 锁死：定死自认上限（动态调节条落地动作） */
 export interface SetCapResult {

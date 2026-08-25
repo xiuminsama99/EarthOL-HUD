@@ -122,7 +122,7 @@ export function ScalePanel({ scale, petBreed, petName, identity, vision }: Scale
         <div style={statBox}>
           <div style={{ fontSize: 20, fontWeight: 700 }}>
             {scale.totalAmount}
-            <span style={{ fontSize: 11, color: '#8b8ba3' }}> 个</span>
+            <span style={{ fontSize: 11, color: '#8b8ba3' }}> {scale.unit}</span>
           </div>
           <div style={{ fontSize: 11, color: '#8b8ba3' }}>累计总量</div>
         </div>

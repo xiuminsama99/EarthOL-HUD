@@ -42,6 +42,8 @@ export interface ScaleData {
   tiltDeg: number
   /** 「已超过全球 X% 的玩家」（示例数据：按达成率模拟，BaaS 后置替换；UI 暂不展示） */
   globalPercent: number
+  /** 累计总量的计量单位（取首个习惯的 unit，MVP 单习惯；展示用） */
+  unit: string
   /** 最近一条行动打卡语（身份一致性的证据）；从未行动为 null */
   latestNote: string | null
 }
@@ -57,6 +59,7 @@ export function computeScaleData(habits: HabitState[], checkins: CheckinRecord[]
   const actionDays = new Set(actions.map((c) => c.businessDate)).size
   const actionCount = actions.length
   const totalAmount = habits.reduce((sum, h) => sum + h.totalAmount, 0)
+  const unit = habits[0]?.unit?.trim() || '次'
   const achieved = actions.filter((c) => c.amount >= c.targetAmount).length
   const achievedRate = actionCount > 0 ? Math.round((achieved / actionCount) * 100) : null
 
@@ -90,6 +93,7 @@ export function computeScaleData(habits: HabitState[], checkins: CheckinRecord[]
     rightValue,
     tiltDeg,
     globalPercent,
+    unit,
     latestNote: latest ? latest.note : null,
   }
 }

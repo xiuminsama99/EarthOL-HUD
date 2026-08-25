@@ -51,7 +51,7 @@ function App() {
         open={showDiagnostics}
         onToggle={(e) => setShowDiagnostics(e.currentTarget.open)}
       >
-        <summary style={{ cursor: 'pointer', userSelect: 'none' }}>地基自检面板（工单 02，诊断用）</summary>
+        <summary style={{ cursor: 'pointer', userSelect: 'none' }}>诊断面板（开发者用）</summary>
         <div style={{ marginTop: 8 }}>
           <FoundationPanel />
         </div>

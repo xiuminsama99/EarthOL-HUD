@@ -8,13 +8,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import { EarthStorage } from '../../storage/storage'
-import type { HabitState } from '../../engine/types'
+import type { CheckinResult, HabitState } from '../../engine/types'
 import {
   createHabit,
   performCheckin,
   planToday,
   setCap,
   buildOverachievementNotice,
+  buildCheckinResultNotice,
+  isZeroTarget,
   deleteHabit,
   renameHabit,
   type CheckinOutcome,
@@ -478,14 +480,106 @@ describe('锁死 / 可调上限（动态调节条）', () => {
   })
 })
 
-describe('A5/B3：超额提示文案（habitFlow 层统一构建）', () => {
-  it('明确告知超额入币上限、不计入养成线、连续养成已重新计数', () => {
+describe('超额提示文案（habitFlow 层统一构建，UX-6 简化）', () => {
+  it('保留「超额 X 中 Y 已存为假期币」区分与「不计入养成进度」，去掉技术腔', () => {
     // 超额 5、其中 3 转为假期币、当前共 3 枚（B3 口径：入币上限=当日目标量）
     const notice = buildOverachievementNotice(5, 3, 3)
-    expect(notice).toContain('不建议')
     expect(notice).toContain('超额 5 中 3 已存为假期币（当前 3 枚）')
-    expect(notice).toContain('不计入养成线')
-    expect(notice).toContain('重新计数')
+    expect(notice).toContain('不计入养成进度')
+    expect(notice).not.toContain('不建议') // 技术警告不再出现在用户可见文案
+    expect(notice).not.toContain('重新计数') // 技术表述移除
+  })
+})
+
+describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
+  const baseHabit: HabitState = {
+    id: 'h1',
+    name: '阅读',
+    direction: 'positive',
+    baseAmount: 1,
+    unit: '次',
+    cap: null,
+    progressStep: 0,
+    totalAmount: 0,
+    consistencyDays: 0,
+    formationDays: 0,
+    isFormed: false,
+    vacationCoins: 0,
+    lastCheckinDate: null,
+    actionCount: 0,
+    createdAt: '2026-01-13',
+  }
+  function result(partial: Partial<CheckinResult>): CheckinResult {
+    return {
+      status: 'checked-in',
+      mode: 'normal',
+      note: '',
+      habit: baseHabit,
+      targetAmount: 5,
+      completedAmount: 5,
+      overAmount: 0,
+      vacationCoinsDelta: 0,
+      formed: false,
+      ...partial,
+    }
+  }
+
+  it('达标：庆祝文案', () => {
+    expect(buildCheckinResultNotice(result({}))).toBe('今日达标 ✓ 以新身份行动的一天')
+  })
+
+  it('未达标：如实告知「做了 X / 目标 Y」并说明不计入养成线', () => {
+    expect(buildCheckinResultNotice(result({ completedAmount: 3 }))).toBe(
+      '做了 3 / 目标 5，明天继续（未达标当天不计入养成线）',
+    )
+  })
+
+  it('超额：走超额提示（含假期币与养成进度口径）', () => {
+    const notice = buildCheckinResultNotice(
+      result({
+        completedAmount: 8,
+        targetAmount: 5,
+        overAmount: 3,
+        vacationCoinsDelta: 1,
+        warning: { kind: 'overachievement', message: '不建议，离目标更远' },
+        habit: { ...baseHabit, vacationCoins: 1 },
+      }),
+    )
+    expect(notice).toContain('超额 3 中 1 已存为假期币（当前 1 枚）')
+    expect(notice).toContain('不计入养成进度')
+  })
+})
+
+describe('UX-7：戒除类习惯触底 0 判定（完成态）', () => {
+  const base: HabitState = {
+    id: 'h1',
+    name: '少吃一口',
+    direction: 'negative',
+    baseAmount: 3,
+    unit: '口',
+    cap: null,
+    progressStep: 3,
+    totalAmount: 0,
+    consistencyDays: 0,
+    formationDays: 0,
+    isFormed: false,
+    vacationCoins: 0,
+    lastCheckinDate: null,
+    actionCount: 0,
+    createdAt: '2026-01-13',
+  }
+
+  it('反向习惯目标触底 0 → true', () => {
+    // 基准 3、进度 3 → 目标 max(0, 3-3)=0
+    expect(isZeroTarget(base, '2026-01-13')).toBe(true)
+  })
+
+  it('未触底 → false', () => {
+    expect(isZeroTarget({ ...base, progressStep: 1 }, '2026-01-13')).toBe(false)
+  })
+
+  it('正向习惯目标为 0 的输入不算触底完成（方向必须为戒除）', () => {
+    expect(isZeroTarget({ ...base, direction: 'positive', progressStep: 0 }, '2026-01-13')).toBe(false)
   })
 })
 
