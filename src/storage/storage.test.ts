@@ -55,7 +55,7 @@ describe('EarthStorage 数据层', () => {
   it('写入后读取 roundtrip', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
-    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
+    s.update((d) => ({ ...d, profile: { id: 'p1', identityStatement: null, vision: null, antivision: null, badHabitDesc: null, annualGoal: null, personaName: null, schedule: 'day', lastScheduleSwitchAt: null, onboardedAt: null, createdAt: '2026-08-25T00:00:00Z' } }))
     const read = s.read()
     expect(read.profile?.id).toBe('p1')
     expect(read.habits).toEqual([])
@@ -222,6 +222,7 @@ describe('EarthStorage 数据层', () => {
     )
     const s = new EarthStorage(backend)
     expect(s.getProfile()?.lastScheduleSwitchAt).toBeNull()
+    expect(s.getProfile()?.annualGoal).toBeNull() // R1：旧档案缺 annualGoal 读回 null
     expect(s.getProfile()?.identityStatement).toBe('我是健康的人') // 其余字段原样保留
   })
 

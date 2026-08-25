@@ -1,7 +1,8 @@
 /**
  * 引导问卷界面（工单 03）
  *
- * 多步引导：欢迎页 → 反愿景 → 正愿景/身份宣言 → 坏习惯（可选）→ 对比图完成。
+ * 多步引导：欢迎页 → 反愿景 → 正愿景/身份宣言 → 年度主线（三层目标第一层）
+ * → 坏习惯（可选）→ 对比图完成。
  * 只做步骤编排与文案，校验与持久化委托 onboardingFlow。
  * AI 生成对比图不在范围，用「现状版 vs 向往版」两栏卡片模板兜底。
  */
@@ -85,6 +86,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   const [vision, setVision] = useState('')
   const [antivision, setAntivision] = useState('')
   const [badHabit, setBadHabit] = useState('')
+  const [annualGoal, setAnnualGoal] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const finish = () => {
@@ -93,6 +95,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
       vision,
       antivision,
       badHabitDesc: badHabit,
+      annualGoal,
     }
     const { error: err } = submitOnboarding({ storage: earthStorage }, input)
     if (err) {
@@ -133,7 +136,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 1) {
     return (
       <main style={panel}>
-        <StepHeader step={2} total={4} title="先看清你最怕什么" />
+        <StepHeader step={2} total={5} title="先看清你最怕什么" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           用大白话写下来：<strong style={{ color: '#ffd27a' }}>5 年后如果什么都不改，我的一个普通周二会怎样？</strong>
           写得越具体越好——恐惧比欲望更会推着你行动。
@@ -168,7 +171,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 2) {
     return (
       <main style={panel}>
-        <StepHeader step={3} total={4} title="你要成为谁？" />
+        <StepHeader step={3} total={5} title="你要成为谁？" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           不是「我要减肥」，而是「我是健康的人」——行为是身份的结果。用一句大白话填完这句：
         </p>
@@ -215,7 +218,46 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   if (step === 3) {
     return (
       <main style={panel}>
-        <StepHeader step={4} total={4} title="你想从哪件事开始？" />
+        <StepHeader step={4} total={5} title="今年，你最想完成的一件事？" />
+        <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
+          身份有了方向，再给它一个目标。不用多，<strong style={{ color: '#7ee0a8' }}>一年就这一件事</strong>——
+          之后每天的微小习惯，都是朝着它迈出的一步。
+        </p>
+        <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 6 }}>
+          以「我是{identity.trim() || '…'}」的身份，今年我想完成：
+        </div>
+        <textarea
+          value={annualGoal}
+          onChange={(e) => setAnnualGoal(e.target.value)}
+          placeholder="比如：每天精力充沛地生活，把身体练回二十岁的样子 / 完成第一本书 / 攒下第一笔自己的钱"
+          rows={3}
+          maxLength={100}
+          style={{ ...inputStyle, resize: 'vertical' }}
+        />
+        <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 4 }}>可跳过，之后也能随时补充。</div>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button type="button" style={ghostBtn} onClick={() => setStep(2)}>
+            上一步
+          </button>
+          <button
+            type="button"
+            style={{ ...primaryBtn, flex: 2 }}
+            onClick={() => {
+              setError(null)
+              setStep(4)
+            }}
+          >
+            下一步
+          </button>
+        </div>
+      </main>
+    )
+  }
+
+  if (step === 4) {
+    return (
+      <main style={panel}>
+        <StepHeader step={5} total={5} title="你想从哪件事开始？" />
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
           描述一个你最想改掉的坏习惯，或最想养成的第一个好习惯。一句大白话就行，后面我们会帮你拆成每天不可能失败的小事。
         </p>
@@ -250,7 +292,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   const hasVision = identity.trim().length > 0
   return (
     <main style={panel}>
-      <StepHeader step={4} total={4} title="两条路，你选一条" />
+      <StepHeader step={5} total={5} title="两条路，你选一条" />
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <div
           style={{

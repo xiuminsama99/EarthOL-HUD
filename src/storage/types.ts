@@ -18,6 +18,8 @@ export interface PlayerProfile {
   antivision: string | null
   /** 最想改掉的一个坏习惯 / 想养成的第一个好习惯（MVP 手动描述，为 AI 拆解留位） */
   badHabitDesc: string | null
+  /** 年度主线：「以「我是__」的身份，今年最想完成的一件事」（三层目标第一层，可选） */
+  annualGoal: string | null
   /** 替身人格名字（工单 04 可复用，先留位） */
   personaName: string | null
   /** 作息类型：白天工作 / 夜间工作 */

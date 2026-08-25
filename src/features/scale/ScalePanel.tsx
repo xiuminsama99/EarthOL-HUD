@@ -3,8 +3,9 @@
  *
  * 主界面「一眼可见四要素」的视觉中枢：左边「真实的你」、右边「向往的你」、
  * 宠物蹲在支点上。每次打卡左盘下沉一点（CSS/SVG 过渡动画，AI 图后置）。
- * 下方累积数字（身份行动天数 / 总量 / 达成率）与「已超过全球 X%」
- * （示例数据诚实标注），以及最近一条打卡语（身份一致性的证据）。
+ * 下方累积数字（身份行动天数 / 总量 / 达成率）与最近一条打卡语（身份一致性的证据）。
+ *
+ * 全球 X% 为纯示例数据，BaaS 接入前不在 UI 展示（scaleFlow 计算字段保留，届时恢复）。
  *
  * 只读组件：全部数据由调用方经 computeScaleData 计算后传入。
  */
@@ -131,14 +132,6 @@ export function ScalePanel({ scale, petBreed, petName, identity, vision }: Scale
           </div>
           <div style={{ fontSize: 11, color: '#8b8ba3' }}>目标达成率</div>
         </div>
-      </div>
-
-      {/* 全球 X%（示例数据，诚实标注） */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: '#7ee0a8' }}>
-          已超过全球 {scale.globalPercent}% 的玩家
-        </span>
-        <span style={{ fontSize: 11, color: '#5a5a74' }}>示例数据 · BaaS 接入后替换</span>
       </div>
 
       {/* 最近一条打卡语（身份一致性的证据） */}

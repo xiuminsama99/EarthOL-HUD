@@ -53,6 +53,7 @@ export const migrations: Record<number, (prev: unknown) => unknown> = {
             vision: profile.vision ?? null,
             antivision: profile.antivision ?? null,
             badHabitDesc: profile.badHabitDesc ?? null,
+            annualGoal: profile.annualGoal ?? null,
             onboardedAt: profile.onboardedAt ?? null,
           }
         : null,
@@ -144,6 +145,7 @@ function normalizeProfile(p: Record<string, unknown>): PlayerProfile {
     vision: typeof p.vision === 'string' ? p.vision : null,
     antivision: typeof p.antivision === 'string' ? p.antivision : null,
     badHabitDesc: typeof p.badHabitDesc === 'string' ? p.badHabitDesc : null,
+    annualGoal: typeof p.annualGoal === 'string' ? p.annualGoal : null,
     personaName: typeof p.personaName === 'string' ? p.personaName : null,
     schedule: p.schedule === 'night' ? 'night' : 'day',
     lastScheduleSwitchAt:
@@ -216,6 +218,7 @@ export class EarthStorage {
       vision: null,
       antivision: null,
       badHabitDesc: null,
+      annualGoal: null,
       personaName: null,
       schedule: 'day',
       lastScheduleSwitchAt: null,

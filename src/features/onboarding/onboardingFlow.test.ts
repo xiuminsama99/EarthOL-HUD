@@ -30,6 +30,7 @@ function onboardedProfile(over: Partial<PlayerProfile> = {}): PlayerProfile {
     vision: null,
     antivision: null,
     badHabitDesc: null,
+    annualGoal: null,
     personaName: null,
     schedule: 'day',
     lastScheduleSwitchAt: null,
@@ -44,6 +45,7 @@ const validInput = {
   vision: '每天精力充沛，爬山不喘',
   antivision: '5 年后还在凌晨两点刷手机',
   badHabitDesc: '熬夜刷手机到一两点',
+  annualGoal: '把身体练回二十岁的样子',
 }
 
 describe('onboardingFlow 引导流程', () => {
@@ -57,6 +59,7 @@ describe('onboardingFlow 引导流程', () => {
     expect(profile?.vision).toBe('每天精力充沛，爬山不喘')
     expect(profile?.antivision).toBe('5 年后还在凌晨两点刷手机')
     expect(profile?.badHabitDesc).toBe('熬夜刷手机到一两点')
+    expect(profile?.annualGoal).toBe('把身体练回二十岁的样子')
     expect(profile?.onboardedAt).not.toBeNull()
   })
 
@@ -91,12 +94,34 @@ describe('onboardingFlow 引导流程', () => {
     expect(s.getProfile()).toBeNull()
   })
 
+  it('年度主线可选：空串归一为 null，不影响提交', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    const result = submitOnboarding(
+      { storage: s },
+      { identityStatement: '我是早起的人', vision: '', antivision: '', badHabitDesc: '', annualGoal: '   ' },
+    )
+    expect(result.error).toBeNull()
+    expect(s.getProfile()?.annualGoal).toBeNull()
+  })
+
+  it('年度主线超长（>100 字）被拒绝', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    const result = submitOnboarding(
+      { storage: s },
+      { ...validInput, annualGoal: '长'.repeat(101) },
+    )
+    expect(result.error).toContain('最长 100 字')
+    expect(s.getProfile()).toBeNull()
+  })
+
   it('可选字段填空字符串归一为 null', () => {
     const { backend } = makeBackend()
     const s = new EarthStorage(backend)
     const result = submitOnboarding(
       { storage: s },
-      { identityStatement: '我是早起的人', vision: '  ', antivision: '', badHabitDesc: '' },
+      { identityStatement: '我是早起的人', vision: '  ', antivision: '', badHabitDesc: '', annualGoal: '' },
     )
     expect(result.error).toBeNull()
     const profile = s.getProfile()
@@ -104,6 +129,7 @@ describe('onboardingFlow 引导流程', () => {
     expect(profile?.vision).toBeNull()
     expect(profile?.antivision).toBeNull()
     expect(profile?.badHabitDesc).toBeNull()
+    expect(profile?.annualGoal).toBeNull()
   })
 
   it('isOnboarded：无档案 / 空身份 → 未引导（走引导）；有身份 → 已引导（跳过）', () => {

@@ -1,7 +1,7 @@
 /**
  * 引导问卷与身份设定流程逻辑（工单 03）
  *
- * 纯逻辑层：输入校验 → 写入玩家档案（身份宣言 / 正反愿景 / 坏习惯描述）。
+ * 纯逻辑层：输入校验 → 写入玩家档案（身份宣言 / 正反愿景 / 年度主线 / 坏习惯描述）。
  * UI 组件只做步骤编排与文案展示，不承载校验规则。
  *
  * 依赖注入：storage 由调用方传入，测试注入 Map backend 的 EarthStorage。
@@ -18,6 +18,8 @@ export interface OnboardingInput {
   antivision: string
   /** 最想改掉的一个坏习惯 / 想养成的第一个好习惯（可选，MVP 手动描述） */
   badHabitDesc: string
+  /** 年度主线：以「我是__」的身份，今年最想完成的一件事（三层目标第一层，可选，≤100 字） */
+  annualGoal: string
 }
 
 export interface OnboardingDeps {
@@ -58,12 +60,16 @@ export function submitOnboarding(
   if (input.badHabitDesc.trim().length > 300) {
     return { profile: null, error: '坏习惯描述最长 300 字' }
   }
+  if (input.annualGoal.trim().length > 100) {
+    return { profile: null, error: '年度主线最长 100 字，一句话说清楚' }
+  }
 
   const profile = deps.storage.updateProfile({
     identityStatement: identity,
     vision: input.vision.trim() || null,
     antivision: input.antivision.trim() || null,
     badHabitDesc: input.badHabitDesc.trim() || null,
+    annualGoal: input.annualGoal.trim() || null,
     onboardedAt: new Date().toISOString(),
   })
   return { profile, error: null }

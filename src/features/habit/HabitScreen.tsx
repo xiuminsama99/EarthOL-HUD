@@ -81,6 +81,10 @@ function HabitScreen() {
     () => earthStorage.getProfile()?.identityStatement ?? null,
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const annualGoal = useMemo(
+    () => earthStorage.getProfile()?.annualGoal ?? null,
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   /** B4：引导时写下的坏习惯描述（预填建习惯表单） */
   const badHabitDesc = useMemo(
     () => earthStorage.getProfile()?.badHabitDesc ?? null,
@@ -323,6 +327,7 @@ function HabitScreen() {
           habit={habit}
           plan={plan}
           autoNote={autoNote}
+          annualGoal={annualGoal}
           amount={amount}
           setAmount={setAmount}
           note={note}
@@ -377,6 +382,8 @@ interface HabitPanelProps {
   plan: ReturnType<typeof planToday>
   /** 自动生成打卡语预览（默认展示，可确认或编辑覆盖） */
   autoNote: string
+  /** 年度主线（三层目标第一层；有值时在习惯卡片展示归属） */
+  annualGoal: string | null
   amount: string
   setAmount(v: string): void
   note: string
@@ -397,6 +404,7 @@ interface HabitPanelProps {
 function HabitPanel(props: HabitPanelProps) {
   const { habit, plan } = props
   const directionLabel = habit.direction === 'positive' ? '养成' : '戒除'
+  const annualGoal = props.annualGoal?.trim()
 
   return (
     <div>
@@ -411,6 +419,12 @@ function HabitPanel(props: HabitPanelProps) {
         总量 {habit.totalAmount} · 养成值 {habit.consistencyDays} 天 · 假期币 {habit.vacationCoins} 枚
         {habit.isFormed && <span style={{ color: '#7c5cff' }}> · 已养成 ✓</span>}
       </p>
+
+      {annualGoal && (
+        <p style={{ color: '#7ee0a8', fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+          🔗 年度主线：{annualGoal}
+        </p>
+      )}
 
       <div style={{ background: '#1b1b33', borderRadius: 10, padding: 16, textAlign: 'center', marginBottom: 16 }}>
         <div style={{ fontSize: 13, color: '#8b8ba3' }}>今日目标</div>
