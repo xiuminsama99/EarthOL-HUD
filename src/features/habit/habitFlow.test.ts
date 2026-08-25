@@ -456,3 +456,73 @@ describe('打卡记录可回读', () => {
     expect(records[1].businessDate).toBe('2026-01-14')
   })
 })
+
+describe('一键打卡（工单 06）', () => {
+  it('一键 = 按当日目标达标打卡：无超额警告、自动打卡语、记录落库', () => {
+    const { deps, storage } = makeDeps()
+    storage.updateProfile({ identityStatement: '早起的人' })
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 2,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    // 一键打卡的语义：amount 取今日目标（planToday 产物）
+    const plan = planToday(habit!, BUSINESS_DATE)
+    expect(plan.target).toBe(2)
+    const outcome = performCheckin(deps, habit!, NOW, 'day', { amount: plan.target })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(outcome.result.warning).toBeUndefined()
+    expect(outcome.record!.amount).toBe(2)
+    expect(outcome.record!.note).toContain('早起的人')
+    const saved = readHabit(storage)
+    expect(saved.consistencyDays).toBe(1)
+    expect(saved.formationDays).toBe(1)
+  })
+
+  it('一键后再走超额快捷按钮（同日）被拒绝：两条路径并存不冲突', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    const plan = planToday(habit!, BUSINESS_DATE)
+    const oneTap = performCheckin(deps, habit!, NOW, 'day', { amount: plan.target })
+    expect(oneTap.result.status).toBe('checked-in')
+    // 同日再点超额快捷按钮：引擎拒绝重复打卡，不产生第二条记录
+    const extra = performCheckin(deps, readHabit(storage), NOW, 'day', {
+      amount: plan.target + 2,
+    })
+    expect(extra.result.status).toBe('rejected')
+    expect(extra.result.reason).toBe('already-checked-in')
+    expect(storage.listCheckins().length).toBe(1)
+  })
+
+  it('一键打卡当日目标随缺勤回退：一键仍按回退后的目标达标', () => {
+    const { deps, storage } = makeDeps()
+    const { habit } = createHabit(deps, {
+      name: '阅读',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: '2026-01-01',
+    })
+    const advanced: HabitState = {
+      ...habit!,
+      progressStep: 10,
+      lastCheckinDate: '2026-01-10',
+    }
+    storage.upsertHabit(advanced)
+    // 2026-01-13：gap=3 → missed=2 → 目标回退到 9
+    const plan = planToday(advanced, BUSINESS_DATE)
+    expect(plan.target).toBe(9)
+    const outcome = performCheckin(deps, advanced, NOW, 'day', { amount: plan.target })
+    expect(outcome.result.status).toBe('checked-in')
+    expect(outcome.result.warning).toBeUndefined()
+    expect(outcome.record!.amount).toBe(9)
+  })
+})

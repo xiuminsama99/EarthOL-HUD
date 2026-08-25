@@ -15,8 +15,10 @@ import { PetCard } from '../pet/PetCard'
 import { recordPetMood } from '../pet/petFlow'
 import type { PetMoodEvent } from '../pet/petFlow'
 import { createHabit, performCheckin, planToday, setCap } from './habitFlow'
-import type { NewHabitInput } from './habitFlow'
+import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
+import { computeScaleData } from '../scale/scaleFlow'
+import { ScalePanel } from '../scale/ScalePanel'
 
 const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
   day: '白天工作',
@@ -38,6 +40,7 @@ const panel: CSSProperties = {
   maxWidth: 480,
   margin: '40px auto',
   padding: 24,
+  paddingBottom: 120, // 给底部固定「一键打卡」留空间
   borderRadius: 12,
   background: '#141428',
   color: '#e5e5f0',
@@ -71,6 +74,23 @@ function HabitScreen() {
     () => earthStorage.getProfile()?.identityStatement ?? null,
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  const vision = useMemo(
+    () => earthStorage.getProfile()?.vision ?? null,
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const pet = useMemo(
+    () => earthStorage.listPets()[0] ?? null,
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const habits = useMemo(
+    () => earthStorage.listHabits(),
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const checkins = useMemo(
+    () => earthStorage.listCheckins(),
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const scale = useMemo(() => computeScaleData(habits, checkins), [habits, checkins])
   /** 自动生成打卡语（预览用）：默认展示，用户可确认或编辑覆盖 */
   const autoNote = useMemo(
     () => (habit ? buildAutoNote(habit, identity) : ''),
@@ -85,10 +105,51 @@ function HabitScreen() {
     [habit, businessDate],
   )
 
+  /** 今日是否已打卡（一键按钮态） */
+  const todayChecked = useMemo(
+    () => (habit && businessDate ? habit.lastCheckinDate === businessDate : false),
+    [habit, businessDate],
+  )
+
   const bump = () => {
     setRefresh((v) => v + 1)
     setAmount('')
     setNote('')
+  }
+
+  /** 打卡动作统一入口：引擎判定 + 宠物心情联动 + 反馈（工单 06 起一键打卡复用） */
+  const runCheckin = (action: CheckinAction) => {
+    setError(null)
+    if (!habit || !timeSource || !plan) return
+    const outcome = performCheckin(
+      { storage: earthStorage },
+      habit,
+      timeSource.now,
+      schedule,
+      action,
+    )
+    const { result } = outcome
+    if (result.status === 'rejected') {
+      setError(REJECT_LABEL[result.reason!])
+      return
+    }
+    bump()
+    // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
+    const moodEvent: PetMoodEvent =
+      (plan.backoffDays ?? 0) > 0
+        ? 'checkin-backoff'
+        : result.warning
+          ? 'checkin-extra'
+          : 'checkin'
+    recordPetMood({ storage: earthStorage }, moodEvent)
+    if (result.warning) {
+      setFeedback({
+        kind: 'warn',
+        text: `${result.warning.message}，超额 ${result.overAmount} 已转为假期币（当前 ${result.habit.vacationCoins} 枚）`,
+      })
+    } else {
+      setFeedback({ kind: 'ok', text: '今日达标 ✓ 以新身份行动的一天' })
+    }
   }
 
   const toggleSchedule = () => {
@@ -106,38 +167,17 @@ function HabitScreen() {
   }
 
   const onCheckin = () => {
-    setError(null)
-    if (!habit || !timeSource) return
-    const outcome = performCheckin(
-      { storage: earthStorage },
-      habit,
-      timeSource.now,
-      schedule,
+    runCheckin({
       // 零输入体验：打卡语为空时交给引擎自动生成
-      { amount: Number(amount), note: note.trim() === '' ? undefined : note },
-    )
-    const { result } = outcome
-    if (result.status === 'rejected') {
-      setError(REJECT_LABEL[result.reason!])
-      return
-    }
-    bump()
-    // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
-    const moodEvent: PetMoodEvent =
-      (plan?.backoffDays ?? 0) > 0 ? 'checkin-backoff'
-      : result.warning ? 'checkin-extra'
-      : 'checkin'
-    recordPetMood({ storage: earthStorage }, moodEvent)
-    if (result.status === 'rest-day') {
-      setFeedback({ kind: 'ok', text: '今日休息，假期币 -1，明天满血回归' })
-    } else if (result.warning) {
-      setFeedback({
-        kind: 'warn',
-        text: `${result.warning.message}，超额 ${result.overAmount} 已转为假期币（当前 ${result.habit.vacationCoins} 枚）`,
-      })
-    } else {
-      setFeedback({ kind: 'ok', text: '今日达标 ✓ 以新身份行动的一天' })
-    }
+      amount: Number(amount),
+      note: note.trim() === '' ? undefined : note,
+    })
+  }
+
+  /** 一键打卡（工单 06）：底部大按钮，按当日目标量达标打卡，零输入 */
+  const onOneTap = () => {
+    if (!plan) return
+    runCheckin({ amount: plan.target })
   }
 
   const onRestDay = () => {
@@ -182,6 +222,14 @@ function HabitScreen() {
 
       <PetCard refreshKey={refresh} />
 
+      <ScalePanel
+        scale={scale}
+        petBreed={pet?.breed ?? null}
+        petName={pet?.name ?? null}
+        identity={identity}
+        vision={vision}
+      />
+
       <div style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}>
         <div style={row}>
           <span style={smallLabel}>时间源</span>
@@ -222,6 +270,34 @@ function HabitScreen() {
           onRestDay={onRestDay}
           onLockCap={onLockCap}
         />
+      )}
+
+      {/* 底部固定「一键打卡」（工单 06）：一天只需要点一下；超额仍走卡片内快捷按钮 */}
+      {habit && plan && (
+        <button
+          type="button"
+          onClick={onOneTap}
+          disabled={todayChecked}
+          style={{
+            position: 'fixed',
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'min(calc(100% - 32px), 448px)',
+            padding: '14px 0',
+            borderRadius: 999,
+            border: 'none',
+            background: todayChecked ? '#2c2c4a' : '#7c5cff',
+            color: todayChecked ? '#8b8ba3' : '#fff',
+            fontSize: 17,
+            fontWeight: 700,
+            cursor: todayChecked ? 'default' : 'pointer',
+            boxShadow: todayChecked ? 'none' : '0 6px 20px rgba(124,92,255,0.35)',
+            zIndex: 10,
+          }}
+        >
+          {todayChecked ? '今日已打卡 ✓' : '一键打卡'}
+        </button>
       )}
     </main>
   )
