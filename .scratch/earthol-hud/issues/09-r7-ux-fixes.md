@@ -68,3 +68,13 @@
 - 测试：timeProvider 并行（注入 fetch 模拟并发成功/部分失败）
 
 **验收说明:** 原 213 测试保持全绿 + 新增/更新用例；tsc / oxlint / build 全绿；提交推送；analysis-features.md 追加体验修复记录。
+
+---
+
+## ✅ 复查遗留收尾（2026-08，commit 8b13e71）
+
+- **N1（P2）**：戒除归 0 完成态下隐藏手动打卡区（今日完成量 + 快捷按钮 + 打卡语 + 打卡按钮），消除「刚好达标=置0」与「完成量≥1」矛盾；只留一键打卡/休息/最低版本
+- **N2（P3）**：作息切换成功反馈走 ok 绿色通道（setFeedback），不再用红色告警样式（setError）
+- **N3（P3）**：诊断面板作息切换与主界面同一守卫——新增 `habitFlow.switchSchedule(deps, current, switchedAt?)` 公共函数（可注入切换时刻测试），两处共用：confirm + 写入 lastScheduleSwitchAt
+- **N4（P3）**：天平累计总量单位——全部习惯单位一致用该单位，不一致/空回退「次」（scaleFlow.computeScaleData）
+- 测试：+6（switchSchedule 4 用例 + N4 单位 2 用例），227/227 全绿
