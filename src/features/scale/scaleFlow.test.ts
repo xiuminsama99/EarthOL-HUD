@@ -22,6 +22,7 @@ function makeHabit(partial: Partial<HabitState> = {}): HabitState {
     name: '每天读一页书',
     direction: 'positive',
     baseAmount: 1,
+    unit: '次',
     cap: null,
     progressStep: 3,
     totalAmount: 0,

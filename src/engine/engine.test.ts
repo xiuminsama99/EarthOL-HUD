@@ -23,6 +23,7 @@ function habit(overrides: Partial<HabitState> = {}): HabitState {
     name: '测试习惯',
     direction: 'positive',
     baseAmount: 1,
+    unit: '次',
     cap: null,
     progressStep: 0,
     totalAmount: 0,

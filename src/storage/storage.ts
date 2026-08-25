@@ -100,6 +100,8 @@ function normalizeHabit(h: unknown): HabitState {
     name: typeof x.name === 'string' ? x.name : '',
     direction: x.direction === 'negative' ? 'negative' : 'positive',
     baseAmount: typeof x.baseAmount === 'number' && x.baseAmount >= 0 ? x.baseAmount : 1,
+    /** R5：旧数据缺 unit 默认「次」（年度效果展示兜底） */
+    unit: typeof x.unit === 'string' && x.unit.trim() !== '' ? x.unit : '次',
     cap: typeof x.cap === 'number' ? x.cap : null,
     progressStep: typeof x.progressStep === 'number' ? x.progressStep : 0,
     totalAmount: typeof x.totalAmount === 'number' ? x.totalAmount : 0,

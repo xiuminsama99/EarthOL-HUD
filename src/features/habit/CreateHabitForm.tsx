@@ -8,6 +8,8 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { HabitDirection } from '../../engine/types'
 import type { NewHabitInput } from './habitFlow'
+import { HABIT_TEMPLATES, UNIT_OPTIONS } from './habitTemplates'
+import type { HabitTemplate } from './habitTemplates'
 
 export interface CreateHabitFormProps {
   /** 当前业务日（作为习惯创建日） */
@@ -47,7 +49,22 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
   const [direction, setDirection] = useState<HabitDirection>(props.initialDirection ?? 'positive')
   const [baseAmount, setBaseAmount] = useState('1')
   const [cap, setCap] = useState('')
+  const [unit, setUnit] = useState('次')
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
+  /** name 是否已被手动编辑/模板覆盖（用于隐藏「来自引导记录」标注，避免误导） */
+  const [nameTouched, setNameTouched] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /** R5：点选模板 → 预填方向/名称/基准/单位，上限留空（用户可再改） */
+  const applyTemplate = (t: HabitTemplate) => {
+    setDirection(t.direction)
+    setName(t.label)
+    setBaseAmount(String(t.baseAmount))
+    setUnit(t.unit)
+    setCap('')
+    setActiveTemplateId(t.id)
+    setNameTouched(true)
+  }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -57,6 +74,7 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
       direction,
       baseAmount: Number(baseAmount),
       cap: parsedCap,
+      unit,
       createdAt: props.businessDate,
     })
     if (result.error) setError(result.error)
@@ -68,6 +86,51 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
       <p style={{ color: '#8b8ba3', fontSize: 13, marginTop: 0 }}>
         等差数列：每天只多做一步（或只多减一点），到自认上限后定死。
       </p>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>
+          从模板开始（点选自动预填，可改）
+        </label>
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            overflowX: 'auto',
+            paddingBottom: 6,
+            marginBottom: 4,
+          }}
+        >
+          {HABIT_TEMPLATES.map((t) => {
+            const active = activeTemplateId === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => applyTemplate(t)}
+                style={{
+                  flexShrink: 0,
+                  width: 128,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${active ? '#7c5cff' : '#2c2c4a'}`,
+                  background: active ? '#241a4a' : '#1b1b33',
+                  color: '#e5e5f0',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>
+                  {t.label}
+                </span>
+                <span style={{ display: 'block', fontSize: 11, color: '#8b8ba3', marginTop: 4 }}>
+                  {t.tip}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       <div style={{ marginBottom: 14 }}>
         <label style={labelStyle}>习惯方向</label>
@@ -107,11 +170,14 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
         <input
           style={inputStyle}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value)
+            setNameTouched(true)
+          }}
           placeholder="如：每天读一页书 / 每天少吃一口"
           maxLength={40}
         />
-        {props.initialName && (
+        {props.initialName && !nameTouched && (
           <span style={{ fontSize: 11, color: '#d9b64a', marginTop: 4 }}>
             来自你的引导记录：{props.initialName}
           </span>
@@ -141,6 +207,20 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
             onChange={(e) => setCap(e.target.value)}
             placeholder="不填则每日 +1"
           />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>计量单位</label>
+          <select
+            style={inputStyle}
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+          >
+            {UNIT_OPTIONS.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

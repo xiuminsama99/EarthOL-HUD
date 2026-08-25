@@ -17,6 +17,7 @@ import type { PetMoodEvent } from '../pet/petFlow'
 import { createHabit, performCheckin, planToday, setCap, buildOverachievementNotice, renameHabit, deleteHabit } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
+import { yearlyEffect } from './habitTemplates'
 import { computeScaleData } from '../scale/scaleFlow'
 import { ScalePanel } from '../scale/ScalePanel'
 import { HeatmapPanel } from '../heatmap/HeatmapPanel'
@@ -460,6 +461,18 @@ function HabitPanel(props: HabitPanelProps) {
         养成线 {habit.formationDays}/{FORMED_DAYS}
         {habit.formationDays > 0 && ` · 连续 ${habit.formationDays} 天达标`}
       </div>
+
+      {/* R5：年度累计效果（持续激励：按当前目标量换算 365 天总量） */}
+      <p
+        style={{
+          color: '#7ee0a8',
+          fontSize: 13,
+          margin: '0 0 12px',
+          fontWeight: 600,
+        }}
+      >
+        {yearlyEffect(plan.target, habit.unit)}，坚持就会抵达
+      </p>
 
       {props.feedback && (
         <p

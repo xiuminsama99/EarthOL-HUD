@@ -27,6 +27,7 @@ function makeHabit(over: Partial<HabitState> = {}): HabitState {
     name: '测试习惯',
     direction: 'positive',
     baseAmount: 10,
+    unit: '次',
     cap: null,
     progressStep: 0,
     totalAmount: 0,
@@ -168,6 +169,30 @@ describe('EarthStorage 数据层', () => {
     )
     const s = new EarthStorage(backend)
     expect(s.listHabits()[0]?.actionCount).toBe(0)
+    expect(s.listHabits()[0]?.name).toBe('测试习惯') // 其余字段原样保留
+  })
+
+  it('R5：旧数据习惯缺 unit 时读回默认「次」（旧 localStorage 数据可用）', () => {
+    const { backend, store } = makeBackend()
+    const legacy = makeHabit() as unknown as Record<string, unknown>
+    delete legacy.unit
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: null,
+          habits: [legacy],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    const s = new EarthStorage(backend)
+    expect(s.listHabits()[0]?.unit).toBe('次')
     expect(s.listHabits()[0]?.name).toBe('测试习惯') // 其余字段原样保留
   })
 

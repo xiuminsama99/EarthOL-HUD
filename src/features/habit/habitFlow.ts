@@ -39,6 +39,8 @@ export interface NewHabitInput {
   baseAmount: number
   /** 可选自认上限：非 null 即创建即锁死 */
   cap: number | null
+  /** 计量单位（R5，默认「次」；仅展示用，引擎规则不读） */
+  unit?: string
   /** 创建业务日 YYYY-MM-DD */
   createdAt: string
 }
@@ -72,12 +74,20 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
   if (!BUSINESS_DATE_RE.test(input.createdAt)) {
     return { habit: null, error: '时间尚未解析完成，请稍后再试' }
   }
+  const unit = (input.unit ?? '次').trim()
+  if (unit.length === 0) {
+    return { habit: null, error: '计量单位不能为空' }
+  }
+  if (unit.length > 10) {
+    return { habit: null, error: '计量单位最长 10 字' }
+  }
 
   const habit: HabitState = {
     id: crypto.randomUUID(),
     name,
     direction: input.direction,
     baseAmount: input.baseAmount,
+    unit,
     cap: input.cap,
     progressStep: 0,
     totalAmount: 0,

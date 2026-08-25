@@ -93,6 +93,21 @@ describe('建习惯', () => {
     expect(readHabit(storage).cap).toBe(5)
   })
 
+  it('R5：单位默认「次」，可自定义，空串/超长拒绝', () => {
+    const { deps } = makeDeps()
+    const base = {
+      name: 'x',
+      direction: 'positive' as const,
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }
+    expect(createHabit(deps, base).habit?.unit).toBe('次')
+    expect(createHabit(deps, { ...base, name: 'y', unit: '个' }).habit?.unit).toBe('个')
+    expect(createHabit(deps, { ...base, name: 'z', unit: '   ' }).error).toContain('单位')
+    expect(createHabit(deps, { ...base, name: 'w', unit: '超长单位超长单位超长字' }).error).toContain('单位')
+  })
+
   it('A3：业务日未解析（非法 createdAt）时拒绝建习惯，不落库', () => {
     const { deps, storage } = makeDeps()
     const r = createHabit(deps, {

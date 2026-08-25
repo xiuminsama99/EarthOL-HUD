@@ -36,6 +36,8 @@ export interface HabitState {
   direction: HabitDirection
   /** 起始基准：第 0 天（未推进时）的当日目标量，永不越过 */
   baseAmount: number
+  /** 计量单位（R5 年度效果展示用，如 次/个/步/分钟/元）；引擎规则不读 */
+  unit: string
   /** 用户自认上限；非 null 即已锁死，目标量恒等于 cap */
   cap: number | null
   /** 当前等差数列位置：已推进的步数（第 N 天目标 = 基准 ± N） */
