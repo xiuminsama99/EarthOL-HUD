@@ -407,7 +407,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           </div>
         )}
         <p style={{ color: '#8b8ba3', fontSize: 14, lineHeight: 1.7, marginTop: 0 }}>
-          描述一个你最想改掉的坏习惯，或最想养成的第一个好习惯。一句大白话就行，后面我们会帮你拆成每天不可能失败的小事。
+          描述一个你最想改掉的坏习惯，或最想养成的第一个好习惯。一句大白话就行，接下来我们会带你从第 1 天里最小的一步开始，每天只多一点点。
         </p>
         <textarea
           value={badHabit}
