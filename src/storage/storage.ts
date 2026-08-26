@@ -156,6 +156,8 @@ function normalizeHabit(h: unknown): HabitState {
     formationDays: typeof x.formationDays === 'number' ? x.formationDays : 0,
     isFormed: x.isFormed === true,
     vacationCoins: typeof x.vacationCoins === 'number' ? x.vacationCoins : 0,
+    /** BUG-1：旧数据无 streakDays → 默认 0（连续计数从下次打卡起重新计） */
+    streakDays: typeof x.streakDays === 'number' ? x.streakDays : 0,
     lastCheckinDate: typeof x.lastCheckinDate === 'string' ? x.lastCheckinDate : null,
     actionCount:
       typeof x.actionCount === 'number' && Number.isFinite(x.actionCount) && x.actionCount >= 0
@@ -176,7 +178,11 @@ function normalizeCheckin(c: unknown): CheckinRecord {
     targetAmount: typeof x.targetAmount === 'number' ? x.targetAmount : 0,
     note: typeof x.note === 'string' ? x.note : '',
     restDay: x.restDay === true,
-    mode: x.mode === 'minimal' ? 'minimal' : 'normal',
+    mode: x.mode === 'minimal' ? 'minimal' : x.mode === 'quit-maintain' ? 'quit-maintain' : 'normal',
+    habitBefore:
+      x.habitBefore && typeof x.habitBefore === 'object'
+        ? (x.habitBefore as HabitState)
+        : undefined,
     createdAt: typeof x.createdAt === 'string' ? x.createdAt : '',
   }
 }

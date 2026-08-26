@@ -18,8 +18,9 @@ export type WorkSchedule = 'day' | 'night'
  * 打卡模式（R4 最低版本）
  * - normal：正常打卡（达标推进养成线 / 超额中断 + 存储假期币）
  * - minimal：最低版本保底行动——状态差时保住今天（目标未达成，但不丢养成进度）
+ * - quit-maintain：戒除完成态「继续坚持」——每天记录"今天也没做 X"，保持 0 目标态，无累计
  */
-export type CheckinMode = 'normal' | 'minimal'
+export type CheckinMode = 'normal' | 'minimal' | 'quit-maintain'
 
 /** 超额警告：完成量超出当日目标时给出 */
 export interface OverachievementWarning {
@@ -58,6 +59,12 @@ export interface HabitState {
   isFormed: boolean
   /** 假期币余额：超额量累计而来，可抵扣休息日 */
   vacationCoins: number
+  /**
+   * 连续良性达成天数（BUG-1：未被 21 天窗口裁剪的原始连续计数）。
+   * 达标/超额日 +1，未达标日清零，休息/最低版本日冻结（不增不减），
+   * 缺勤归来清零（链被打断）。赠券判定用此值（%7），而非 formationDateList 长度。
+   */
+  streakDays: number
   /** 上次打卡的业务日（YYYY-MM-DD），null 表示从未打卡 */
   lastCheckinDate: string | null
   /** 真实打卡成功次数（checked-in 才 +1；休息日/拒绝不计；锁死与缺勤回退不影响）——打卡语「第 N 次」的 N */
@@ -130,4 +137,6 @@ export interface CheckinResult {
   vacationCoinsDelta: number
   /** 本次动作后的养成状态 */
   formed: boolean
+  /** 本次是否因连续达标 STREAK_COIN_DAYS 天赠出休息券（P1-2：反馈提示用；0/1） */
+  streakCoin?: number
 }

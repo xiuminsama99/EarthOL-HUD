@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { HabitState, RejectReason, WorkSchedule } from '../../engine/types'
-import { FORMED_DAYS, buildAutoNote } from '../../engine/engine'
+import { FORMED_DAYS, buildAutoNote, projectAnnual } from '../../engine/engine'
 import { earthStorage } from '../../storage/storage'
 import { parseData, serializeData } from '../../storage/storage'
 import { playChime, isSoundEnabled } from '../../util/playChime'
@@ -284,6 +284,12 @@ function HabitScreen() {
       setFeedback({ kind: 'ok', text: '今天也算行动了 ✓ 不丢进度，明天从原目标继续' })
       return
     }
+    if (result.mode === 'quit-maintain') {
+      // 戒除完成态：继续坚持，不做超额/达标判定
+      playChime('minimal', isSoundEnabled(earthStorage.getSettings()))
+      setFeedback({ kind: 'ok', text: '今天也没做「它」✓ 继续坚持，守住你的界限' })
+      return
+    }
     // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
     const moodEvent: PetMoodEvent =
       (targetPlan.backoffDays ?? 0) > 0
@@ -374,6 +380,12 @@ function HabitScreen() {
   const onMinimalCheckin = () => {
     if (!habit || !plan) return
     runCheckin(habit, plan, { amount: 1, mode: 'minimal' })
+  }
+
+  /** P1-1：戒除完成态「继续坚持」——记录今天也没做 X，保持 0 目标态 */
+  const onQuitMaintain = () => {
+    if (!habit || !plan) return
+    runCheckin(habit, plan, { amount: 0, mode: 'quit-maintain' })
   }
 
   const onRestDay = () => {
@@ -740,6 +752,7 @@ function HabitScreen() {
             onCheckin={onCheckin}
             onQuickCheckin={onQuickCheckin}
             onMinimalCheckin={onMinimalCheckin}
+            onQuitMaintain={onQuitMaintain}
             onRestDay={onRestDay}
             onLockCap={onLockCap}
             onRename={onRename}
@@ -817,7 +830,7 @@ function HabitScreen() {
             zIndex: 10,
           }}
         >
-          {zeroTarget ? '已戒除完成 🎉' : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
+          {zeroTarget ? (todayChecked ? '今日已坚持 ✓' : '继续坚持（今天也没做它）') : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
         </button>
       )}
 
@@ -856,6 +869,8 @@ interface HabitPanelProps {
   /** 快捷打卡（UX-16/20）：「刚好达标 / 多做了 N」点击即直接打卡 */
   onQuickCheckin(amount: number): void
   onMinimalCheckin(): void
+  /** P1-1：戒除完成态「继续坚持」——记录今天也没做 X，保持 0 目标态 */
+  onQuitMaintain(): void
   onRestDay(): void
   onLockCap(): void
   onRename(): void
@@ -893,10 +908,28 @@ function HabitPanel(props: HabitPanelProps) {
 
       <div style={{ background: '#1b1b33', borderRadius: 10, padding: 16, textAlign: 'center', marginBottom: 16 }}>
         {zeroTarget ? (
-          <div style={{ fontSize: 15, color: '#7ee0a8', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 14, color: '#7ee0a8', lineHeight: 1.6 }}>
             已戒除到 0，恭喜！
             <br />
-            可以换个新习惯，或继续坚持
+            <span style={{ fontSize: 12, color: '#8b8ba3' }}>已经迈过最难的坎，守住它</span>
+            <div style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                disabled={done}
+                onClick={props.onQuitMaintain}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: 999,
+                  border: done ? '1px solid #2c2c4a' : '1px solid #7c5cff',
+                  background: done ? '#2c2c4a' : 'rgba(124,92,255,0.15)',
+                  color: done ? '#5a5a74' : '#b9a8ff',
+                  fontSize: 13,
+                  cursor: done ? 'default' : 'pointer',
+                }}
+              >
+                {done ? '今日已坚持 ✓' : '继续坚持（今天也没做它）'}
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -1075,11 +1108,11 @@ function HabitPanel(props: HabitPanelProps) {
           休息
         </button>
       </div>
-      {/* UX-14：两个「今天不想做」出口的人话区分 */}
+      {/* UX-14：两个「今天不想做」出口的人话区分（P1-2：明示行动率差异，避免「休息券是废币」） */}
       <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 6, lineHeight: 1.7 }}>
-        「休息」用 1 张休息券，今天不打卡也不缺勤
+        「休息」用 1 张休息券：今天彻底放假，不计入 7 天行动率
         <br />
-        「做 1 个就算数」太累时保底，不丢进度
+        「做 1 个就算数」太累时保底：免券，但算作行动日（会拉低你的 7 天行动率）
       </div>
 
       {/* 最低版本（R4 + UX-12/14 人话化）：状态差保底行动，不丢养成进度（防流失最后一道防线） */}
@@ -1232,6 +1265,25 @@ interface SideHabitCardProps {
   onChanged(): void
 }
 
+/** P2-3：支线习惯的迷你年度投影（一行「一年后约 X」）——复用 engine projectAnnual */
+function sideAnnualLine(habit: HabitState, businessDate: string): string {
+  try {
+    const proj = projectAnnual(habit, businessDate)
+    const unit = habit.unit?.trim() || '次'
+    if (habit.direction === 'negative') {
+      return `戒除中 · 每天少做一点点，一年后约省 ${fmtNum(proj.todayTarget * 365)} ${unit}`
+    }
+    return `一年后累计约 ${fmtNum(proj.idealAnnual)} ${unit}`
+  } catch {
+    return ''
+  }
+}
+
+function fmtNum(n: number): string {
+  if (!Number.isFinite(n)) return '0'
+  return Math.floor(n).toLocaleString('zh-CN')
+}
+
 function SideHabitCard({ habit, businessDate, schedule, now, onChanged }: SideHabitCardProps) {
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -1333,9 +1385,12 @@ function SideHabitCard({ habit, businessDate, schedule, now, onChanged }: SideHa
 
       {open && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: '#8b8ba3', marginBottom: 6 }}>
             总量 {habit.totalAmount} · 达标次数 {habit.consistencyDays} 天 · 休息券 {habit.vacationCoins} 张
             {habit.isFormed && <span style={{ color: '#7c5cff' }}> · 已养成 ✓</span>}
+          </div>
+          <div style={{ fontSize: 12, color: '#a9a9c4', marginBottom: 8 }}>
+            {sideAnnualLine(habit, businessDate)}
           </div>
 
           {feedback && (

@@ -221,7 +221,7 @@ describe('今日计划（目标量 + 回退展示）', () => {
     })
   })
 
-  it('缺勤归来：目标回退并如实上报回退天数（触底时以实际为准）', () => {
+  it('BUG-3：缺勤归来回退折扣只在归来日生效——明日预告用真实打卡后值（不再跳崖）', () => {
     const { deps, storage } = makeDeps()
     const r = createHabit(deps, {
       name: '阅读',
@@ -230,56 +230,31 @@ describe('今日计划（目标量 + 回退展示）', () => {
       cap: null,
       createdAt: '2026-01-01',
     })
-    const advanced: HabitState = {
-      ...r.habit!,
-      progressStep: 10,
-      lastCheckinDate: '2026-01-10',
-    }
+    // 进度 10，缺勤至 2026-01-13 归来：今日目标回退为 1+8=9，backoff=2
+    const advanced: HabitState = { ...r.habit!, progressStep: 10, lastCheckinDate: '2026-01-10' }
     storage.upsertHabit(advanced)
-    // 业务日 2026-01-13：gap=3 → missed=2 → 目标回退到 1+8=9
     const plan = planToday(advanced, '2026-01-13')
     expect(plan.target).toBe(9)
     expect(plan.backoffDays).toBe(2)
-    // 触底场景：进度 2、缺勤 9 天 → 目标 1，实际只回退 2 步
-    const bottom: HabitState = {
-      ...r.habit!,
-      progressStep: 2,
-      lastCheckinDate: '2026-01-10',
-    }
-    const planBottom = planToday(bottom, '2026-01-20')
-    expect(planBottom.target).toBe(1)
-    expect(planBottom.backoffDays).toBe(2)
+    // 明日真实值 = 打卡后（progressStep 11、lastCheckinDate=今日、明日不再缺勤）→ 1+11=12
+    expect(plan.tomorrowTarget).toBe(12)
   })
 
-  it('A2：正向习惯明日目标 +1', () => {
-    const { deps } = makeDeps()
-    const { habit } = createHabit(deps, {
+  it('BUG-3：无缺勤时明日预告 = 今日 + 1（原语义不变）', () => {
+    const { deps, storage } = makeDeps()
+    const r = createHabit(deps, {
       name: '阅读',
       direction: 'positive',
       baseAmount: 2,
       cap: null,
       createdAt: BUSINESS_DATE,
     })
-    expect(planToday(habit!, BUSINESS_DATE).tomorrowTarget).toBe(3)
-  })
-
-  it('A2：反向习惯明日目标递减，触底 0 不再为负', () => {
-    const { deps, storage } = makeDeps()
-    const { habit } = createHabit(deps, {
-      name: '少吃一口',
-      direction: 'negative',
-      baseAmount: 10,
-      cap: null,
-      createdAt: BUSINESS_DATE,
-    })
-    const advanced: HabitState = { ...habit!, progressStep: 5 } // 今日目标 5
-    storage.upsertHabit(advanced)
-    expect(planToday(advanced, BUSINESS_DATE).tomorrowTarget).toBe(4)
-    const bottom: HabitState = { ...habit!, progressStep: 10 } // 今日目标 0
-    storage.upsertHabit(bottom)
-    const plan = planToday(bottom, BUSINESS_DATE)
-    expect(plan.target).toBe(0)
-    expect(plan.tomorrowTarget).toBe(0) // 触底不再出现负数
+    const h: HabitState = { ...r.habit!, progressStep: 5, lastCheckinDate: '2026-01-12' }
+    storage.upsertHabit(h)
+    const plan = planToday(h, '2026-01-13')
+    expect(plan.target).toBe(7)
+    expect(plan.backoffDays).toBe(0)
+    expect(plan.tomorrowTarget).toBe(8) // 无回退：明日 = 打卡后 target(2+6=8)
   })
 })
 
@@ -560,6 +535,7 @@ describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
+    streakDays: 0,
     lastCheckinDate: null,
     actionCount: 0,
     createdAt: '2026-01-13',
@@ -603,6 +579,17 @@ describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
     expect(notice).toContain('储蓄日：超额 3 中 1 已存为休息券（当前 1 张）')
     expect(notice).toContain('进度冻结一天，不丢失')
   })
+
+  it('P1-2：连续达标赠券日，达标文案追加赠券提示', () => {
+    const notice = buildCheckinResultNotice(result({ completedAmount: 5, targetAmount: 5, streakCoin: 1 }))
+    expect(notice).toContain('今日达标 ✓')
+    expect(notice).toContain('连续达标 7 天，获得 1 张休息券')
+  })
+
+  it('P1-2：未赠券的达标日不给赠券提示', () => {
+    const notice = buildCheckinResultNotice(result({ completedAmount: 5, targetAmount: 5 }))
+    expect(notice).toBe('今日达标 ✓ 以新身份行动的一天')
+  })
 })
 
 describe('UX-7：戒除类习惯触底 0 判定（完成态）', () => {
@@ -620,6 +607,7 @@ describe('UX-7：戒除类习惯触底 0 判定（完成态）', () => {
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
+    streakDays: 0,
     lastCheckinDate: null,
     actionCount: 0,
     createdAt: '2026-01-13',
@@ -981,6 +969,7 @@ describe('R10b-1 一年之约面板文案（buildAnnualPanelCopy）', () => {
       formationDays: 0,
       isFormed: false,
       vacationCoins: 0,
+      streakDays: 0,
       lastCheckinDate: null,
       actionCount: 0,
       createdAt: '2026-01-01',

@@ -115,18 +115,6 @@ function pruneFormationDates(dates: string[], businessDate: string): string[] {
   })
 }
 
-/** 截至 businessDate 的连续达标天数（按业务日往前数；中断即停） */
-function achievedStreak(dates: string[], businessDate: string): number {
-  const set = new Set(dates)
-  let streak = 0
-  let cursor = businessDate
-  while (set.has(cursor)) {
-    streak += 1
-    cursor = dayKeyWithDelta(cursor, -1, BUSINESS_TIME_ZONE)
-  }
-  return streak
-}
-
 /**
  * 规则 1/2/3/4：当日目标量。
  * - 正向：第 N 天目标 = 基准 + N（未锁死）
@@ -180,6 +168,12 @@ export function buildMinimalNote(habit: HabitState, identity: string | null): st
   return `状态不太好也没关系，做了一点点（以${who}的身份，今天也算行动了）`
 }
 
+/** 戒除完成态「继续坚持」打卡语（P1-1）：保持 0 目标态，防止复吸无记录。 */
+export function buildQuitMaintainNote(habit: HabitState, identity: string | null): string {
+  const who = identity?.trim() ? identity.trim() : habit.name
+  return `今天也没做${habit.name}（以${who}的身份，继续坚持）`
+}
+
 /**
  * 规则 9：打卡语约束。
  * note 未传（undefined）→ 自动生成（零输入）；传字符串 → trim 后必须非空。
@@ -200,6 +194,11 @@ export function checkIn(input: CheckinInput): CheckinResult {
   const { habit, now, schedule, amount, note, restDay } = input
   const identity = input.identity ?? null
   const mode: CheckinMode = input.mode ?? 'normal'
+  // quit-maintain 仅在戒除习惯且目标已触底 0 时适用；否则回落 normal（正向/未触底不消费
+  // 该模式，避免 result.mode 是 quit-maintain 却走了普通打卡路径的语义错乱）
+  const isQuitMaintainApplicable =
+    mode === 'quit-maintain' && habit.direction === 'negative' && getDailyTarget(habit, resolveBusinessDate(now, schedule)) === 0
+  const effectiveMode: CheckinMode = mode === 'quit-maintain' && !isQuitMaintainApplicable ? 'normal' : mode
 
   const businessDate = resolveBusinessDate(now, schedule)
   const targetAmount = getDailyTarget(habit, businessDate)
@@ -294,6 +293,27 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
   }
 
+  // ---- 戒除完成态「继续坚持」（P1-1）：目标已到 0，记录"今天也没做 X"，保持 0 目标态 ----
+  // 仅戒除习惯且目标已触底 0 时可用；不累计总量/行动次数（它本就不是"行动"），
+  // 进度/养成窗口/休息券/连胜均不动（保持已养成的 0 目标状态），仅刷新当日避免缺勤回退。
+  if (isQuitMaintainApplicable) {
+    const nextHabit: HabitState = {
+      ...habit,
+      lastCheckinDate: businessDate,
+    }
+    return {
+      status: 'checked-in',
+      mode: effectiveMode,
+      habit: nextHabit,
+      note: note !== undefined ? note.trim() : buildQuitMaintainNote(habit, identity),
+      targetAmount,
+      completedAmount: 0,
+      overAmount: 0,
+      vacationCoinsDelta: 0,
+      formed: habit.isFormed,
+    }
+  }
+
   // ---- 状态推进 ----
   let progressStep = habit.progressStep
   if (habit.cap === null) progressStep += 1
@@ -310,6 +330,19 @@ export function checkIn(input: CheckinInput): CheckinResult {
   // 达标日（完成量 === 目标量）：养成值与窗口都推进；否则冻结（不加不清零，R-1）
   const achieved = amount === targetAmount
   const consistencyDays = achieved ? habit.consistencyDays + 1 : habit.consistencyDays
+
+  // BUG-1：连续良性达成计数（原始、未被 21 天窗口裁剪）。
+  // 仅达标日（amount === target，即 achieved） +1；未达标/超额断连清零；
+  // 缺勤归来（miss > 0）链被打断清零；休息/最低版本日提前 return（冻结不增不减）。
+  // 说明：超额在窗口制养成里同样"冻结不计达标"（R-1 现有语义），因此对 streak 也是断连。
+  const miss = missedDays(habit, businessDate)
+  let streakDays = habit.streakDays
+  if (miss > 0) streakDays = 0 // 缺勤归来：链被打断
+  if (achieved) {
+    streakDays += 1
+  } else {
+    streakDays = 0 // 未达标（含超额）断连
+  }
 
   // ---- R-1 窗口制养成（冻结不惩罚）----
   // 达标日追加到窗口，未达标/超额日冻结（不加也不清零），窗口按业务日自然滑动
@@ -332,9 +365,9 @@ export function checkIn(input: CheckinInput): CheckinResult {
   // 已养成后不被单日撤销（isFormed 一旦为真即保持）；达到窗口阈值养成；戒除触底亦养成
   const isFormed = habit.isFormed || formationDays >= FORMATION_THRESHOLD || quitCompleted
 
-  // R-2：连续达标 STREAK_COIN_DAYS 天赠 1 张休息券（达标日当天发放）
-  const streak = achieved ? achievedStreak(formationDateList, businessDate) : 0
-  const streakCoin = streak > 0 && streak % STREAK_COIN_DAYS === 0 ? 1 : 0
+  // R-2：连续良性达成 STREAK_COIN_DAYS 天赠 1 张休息券（达标日当天发放）
+  // BUG-1：用原始 streakDays（未被 21 天窗口裁剪），避免窗口满后每天白送券
+  const streakCoin = streakDays > 0 && streakDays % STREAK_COIN_DAYS === 0 ? 1 : 0
   const vacationCoins = habit.vacationCoins + vacationCoinsGain + streakCoin
 
   const nextHabit: HabitState = {
@@ -347,6 +380,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     isFormed,
     vacationCoins,
     actionCount,
+    streakDays,
     lastCheckinDate: businessDate,
   }
 
@@ -361,7 +395,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
 
   return {
     status: 'checked-in',
-    mode,
+    mode: effectiveMode,
     habit: nextHabit,
     note: finalNote,
     targetAmount,
@@ -370,6 +404,7 @@ export function checkIn(input: CheckinInput): CheckinResult {
     overAmount,
     vacationCoinsDelta: vacationCoinsGain,
     formed: isFormed,
+    streakCoin,
   }
 }
 

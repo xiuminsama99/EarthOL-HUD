@@ -34,6 +34,7 @@ function habit(overrides: Partial<HabitState> = {}): HabitState {
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
+    streakDays: 0,
     lastCheckinDate: null,
     actionCount: 0,
     createdAt: '2026-01-01',
@@ -260,22 +261,50 @@ describe('规则 8：21 天滑动窗口养成制（R-1：达标 ≥14 天养成�
 })
 
 describe('R-2：连续达标 7 天赠 1 张休息券', () => {
-  it('连续达标第 7 天 → +1 券（达成日当天发放）', () => {
-    const dates = ['2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', '2026-01-11', '2026-01-12']
-    const h = habit({ progressStep: 6, formationDateList: dates, lastCheckinDate: '2026-01-12' })
+  it('连续良性达成第 7 天 → +1 券（达标日当天发放）', () => {
+    const h = habit({ progressStep: 6, streakDays: 6, formationDateList: ['2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', '2026-01-11', '2026-01-12'], lastCheckinDate: '2026-01-12' })
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '第 7 天' })
     expect(r.status).toBe('checked-in')
     expect(r.vacationCoinsDelta).toBe(0) // 达标日无超额币
+    expect(r.habit.streakDays).toBe(7)
     expect(r.habit.vacationCoins).toBe(1) // 连续 7 天赠 1 券
     expect(r.habit.formationDays).toBe(7)
   })
 
   it('未满 7 天不赠券（连续断档则重计）', () => {
-    const h = habit({ progressStep: 3, formationDateList: ['2026-01-10', '2026-01-11'], lastCheckinDate: '2026-01-11' })
+    const h = habit({ progressStep: 3, streakDays: 2, lastCheckinDate: '2026-01-11' })
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '断档后归来' })
     expect(r.status).toBe('checked-in')
     expect(r.vacationCoinsDelta).toBe(0)
+    expect(r.habit.streakDays).toBe(1) // 缺勤 1 天归来：链重置
     expect(r.habit.vacationCoins).toBe(0)
+  })
+
+  it('BUG-1：连续 21 天后不再每日赠券（用原始 streakDays 而非窗口裁剪）', () => {
+    const h = habit({ progressStep: 20, streakDays: 20, lastCheckinDate: '2026-01-12' })
+    // 第 21 天（2026-01-13）：streakDays 21 → 仍 %7==0 赠券
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '第 21 天' })
+    expect(r.habit.streakDays).toBe(21)
+    expect(r.habit.vacationCoins).toBe(1)
+    // 第 22 天：streakDays 22 → 不再 %7==0，不赠券
+    const r2 = checkIn({ habit: r.habit, now: new Date(2026, 0, 14, 10, 0), schedule: 'day', amount: getDailyTarget(r.habit, '2026-01-14') + 1, note: '第 22 天' })
+    expect(r2.habit.streakDays).toBe(0) // 超额断连（现有语义：超额=非达标）
+    expect(r2.habit.vacationCoins).toBe(2) // 第 21 天 1 券；第 22 天未赠券
+  })
+
+  it('BUG-1：day63 全勤仅 9 券而非 42（不复用窗口裁剪）', () => {
+    let h = habit({ streakDays: 0, createdAt: '2026-01-01' })
+    let coins = 0
+    for (let d = 0; d < 63; d++) {
+      const now = new Date(Date.UTC(2026, 0, 1 + d, 10, 0))
+      const bd = resolveBusinessDate(now, 'day')
+      const target = getDailyTarget(h, bd)
+      const r = checkIn({ habit: h, now, schedule: 'day', amount: target, note: `day${d + 1}` })
+      h = r.habit
+      coins = h.vacationCoins
+    }
+    expect(h.streakDays).toBe(63)
+    expect(coins).toBe(9) // 63 = 9×7
   })
 })
 
@@ -295,6 +324,29 @@ describe('R-3：戒除习惯触底 0 直接养成', () => {
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '持续减少' })
     expect(r.status).toBe('checked-in')
     expect(r.habit.isFormed).toBe(false)
+  })
+
+  it('P1-1：戒除完成态「继续坚持」——记录今天也没做 X，保持 0 目标态无累计', () => {
+    // 基准 5、进度 5 → 目标 0（已触底完成）
+    const base = habit({ direction: 'negative', baseAmount: 5, progressStep: 5, isFormed: true, totalAmount: 15, actionCount: 5, streakDays: 5 })
+    const r = checkIn({ habit: base, now: NOW, schedule: 'day', amount: 0, mode: 'quit-maintain', identity: '健康的人' })
+    expect(r.status).toBe('checked-in')
+    expect(r.mode).toBe('quit-maintain')
+    expect(r.habit.totalAmount).toBe(15) // 不累计
+    expect(r.habit.actionCount).toBe(5) // 不增行动次数
+    expect(r.habit.streakDays).toBe(5) // 连胜保持
+    expect(r.habit.vacationCoins).toBe(0) // 不产券
+    expect(r.habit.isFormed).toBe(true)
+    expect(r.habit.lastCheckinDate).toBe('2026-01-13') // 刷新当日避免缺勤
+    expect(r.note).toContain('今天也没做')
+  })
+
+  it('P1-1：quit-maintain 仅在戒除且目标 0 时生效（正向习惯拒绝走普通路径）', () => {
+    const h = habit({ direction: 'positive', baseAmount: 1, progressStep: 3 })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 0, mode: 'quit-maintain' })
+    // 正向习惯不满足 quit-maintain 条件 → 走普通路径：amount 0 → 未达标（缺 note 自动生成）
+    expect(r.status).toBe('checked-in')
+    expect(r.mode).toBe('normal')
   })
 })
 

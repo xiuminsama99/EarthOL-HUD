@@ -12,6 +12,7 @@ import {
   buildStoryTimeline,
   editTodayNote,
   deleteTodayCheckin,
+  buildMonthlySummary,
   STORY_STATUS_COLOR,
 } from './storyFlow'
 import type { StoryStatus } from './storyFlow'
@@ -37,6 +38,7 @@ const STATUS_LABEL: Record<StoryStatus, string> = {
   '超额': '超额',
   '休息': '休息',
   '最低版本': '最低版本',
+  '戒除坚持': '戒除坚持',
 }
 
 interface StoryPanelProps {
@@ -62,6 +64,9 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
     [habitName],
   )
 
+  /** P2-1：本月统计卡 */
+  const monthly = useMemo(() => buildMonthlySummary(earthStorage.listCheckins(), businessDate), [businessDate])
+
   const beginEdit = (id: string, note: string) => {
     setEditId(id)
     setDraft(note)
@@ -81,7 +86,9 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
 
   const onDelete = (id: string) => {
     setError(null)
-    const confirmed = window.confirm('删除这条今天的记录？之后可以重新打卡。')
+    const confirmed = window.confirm(
+      '删除这条今天的记录？打卡状态将一并撤销，可以重新打卡。',
+    )
     if (!confirmed) return
     const r = deleteTodayCheckin({ storage: earthStorage }, id, businessDate)
     if (!r.ok) {
@@ -136,6 +143,28 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
           <Stat label="打卡次数" value={timeline.totalCheckins} />
           <Stat label="休息券使用" value={timeline.restUses} />
         </div>
+
+        {/* P2-1：本月统计卡 */}
+        {monthly && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, #1b1b33 0%, #241a3e 100%)',
+              border: '1px solid #2c2c4a',
+            }}
+          >
+            <div style={{ fontSize: 13, color: '#7ee0a8', fontWeight: 600, marginBottom: 6 }}>
+              📅 本月小结（{formatMonth(monthly.month)}）
+            </div>
+            <div style={{ fontSize: 12, color: '#a9a9c4', lineHeight: 1.7 }}>
+              行动 {monthly.actionDays} 天 · 打卡 {monthly.checkins} 次 · 总量 {monthly.totalAmount}
+              {monthly.actionRate !== null ? ` · 行动率 ${monthly.actionRate}%` : ''}
+              {monthly.restUses > 0 ? ` · 休息 ${monthly.restUses} 天` : ''}
+            </div>
+          </div>
+        )}
 
         {error && (
           <p role="alert" style={{ color: '#ff9a9a', fontSize: 13, margin: '0 0 12px' }}>
@@ -287,4 +316,10 @@ function formatDate(date: string): string {
   const labels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
   const weekday = new Date(Date.UTC(Number(date.split('-')[0]), m - 1, d)).getUTCDay()
   return `${m} 月 ${d} 日 ${labels[weekday]}`
+}
+
+/** 月份 YYYY-MM → 「M 月」（P2-1） */
+function formatMonth(month: string): string {
+  const [, m] = month.split('-').map(Number)
+  return `${m} 月`
 }

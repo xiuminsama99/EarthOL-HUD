@@ -148,6 +148,7 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
+    streakDays: 0,
     lastCheckinDate: null,
     actionCount: 0,
     createdAt: input.createdAt,
@@ -226,17 +227,22 @@ export function buildAnnualPanelCopy(
  * - 达标：庆祝
  */
 export function buildCheckinResultNotice(result: CheckinResult): string {
+  // P1-2：连续达标赠券提示（如当天达标 + 促发 7 天券，一并告知）
+  const streakMsg = result.streakCoin ? '连续达标 7 天，获得 1 张休息券。' : ''
   if (result.warning) {
-    return buildOverachievementNotice(
+    const base = buildOverachievementNotice(
       result.overAmount,
       result.vacationCoinsDelta,
       result.habit.vacationCoins,
     )
+    return streakMsg ? `${base}${streakMsg}` : base
   }
   if (result.completedAmount < result.targetAmount) {
     return `做了 ${result.completedAmount} / 目标 ${result.targetAmount}，明天继续（进度冻结，不丢历史）`
   }
-  return '今日达标 ✓ 以新身份行动的一天'
+  return streakMsg
+    ? `今日达标 ✓ 以新身份行动的一天。${streakMsg}`
+    : '今日达标 ✓ 以新身份行动的一天'
 }
 
 /** UX-7：戒除类习惯目标触底 0（已完成判定，UI 展示完成态用） */
@@ -244,10 +250,17 @@ export function isZeroTarget(habit: HabitState, businessDate: string): boolean {
   return habit.direction === 'negative' && getDailyTarget(habit, businessDate) === 0
 }
 
-/** 今日计划：目标量 + 明日目标 + 缺勤回退信息（展示用） */
+/**
+ * 今日计划：目标量 + 明日目标 + 缺勤回退信息（展示用）
+ *
+ * BUG-3（诚实预告）：明日目标 = 打卡后将要面对的真实值。缺勤回归日，回退折扣只在归来日
+ * 当天生效，一旦打卡（lastCheckinDate 更新为今日）明日不再视为缺勤，目标会回弹到
+ * 无缺勤位置。因此明日目标 = getDailyTarget(打卡后习惯, 明日)，而非今日目标 ± 1，
+ * 避免「预告 6、实际 11」的跳崖式谎言。
+ */
 export interface TodayPlan {
   target: number
-  /** 明日目标量（反向触底时为 0，不会出现负数——A2 修复） */
+  /** 明日目标量（真实值：打卡后将面对的量；反向触底时为 0，不会出现负数——A2 修复） */
   tomorrowTarget: number
   /** 缺勤回退天数（0 = 无回退） */
   backoffDays: number
@@ -266,9 +279,28 @@ export function planToday(habit: HabitState, businessDate: string): TodayPlan {
         : Math.max(0, habit.baseAmount - habit.progressStep)
     backoffDays = Math.max(0, noMissTarget - target)
   }
+  // BUG-3：模拟「今天已打卡（达标）+ 明日不再缺勤」后的真实明日目标
+  const postCheckin: HabitState = {
+    ...habit,
+    // 打卡后进度推进一步（未锁死）；锁死恒 cap
+    progressStep: habit.cap === null ? habit.progressStep + 1 : habit.progressStep,
+    lastCheckinDate: businessDate,
+  }
+  const tomorrow = businessDelta(businessDate, 1)
   const tomorrowTarget =
-    habit.direction === 'positive' ? target + 1 : Math.max(0, target - 1)
+    habit.cap !== null
+      ? habit.cap
+      : getDailyTarget(postCheckin, tomorrow)
   return { target, tomorrowTarget, backoffDays, locked: habit.cap !== null }
+}
+
+/** 业务日 YYYY-MM-DD 加减 N 天（仅日历运算，纯字符串；heatmapFlow 同口径） */
+function businessDelta(date: string, delta: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + delta, 12))
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getUTCDate()).padStart(2, '0')
+  return `${dt.getUTCFullYear()}-${mm}-${dd}`
 }
 
 /** 打卡动作参数 */
@@ -278,8 +310,8 @@ export interface CheckinAction {
   note?: string
   /** 是否用假期币抵扣休息（默认 false） */
   restDay?: boolean
-  /** 打卡模式（R4）：normal 默认 / minimal 最低版本保底 */
-  mode?: 'normal' | 'minimal'
+  /** 打卡模式（R4）：normal 默认 / minimal 最低版本保底 / quit-maintain 戒除完成态继续坚持 */
+  mode?: 'normal' | 'minimal' | 'quit-maintain'
 }
 
 export interface CheckinOutcome {
@@ -357,6 +389,7 @@ export function performCheckin(
     note: result.note,
     restDay: result.status === 'rest-day',
     mode: result.mode,
+    habitBefore: habit,
     createdAt: new Date().toISOString(),
   }
   deps.storage.addCheckin(record)

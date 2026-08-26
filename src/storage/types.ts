@@ -69,7 +69,12 @@ export interface CheckinRecord {
   /** 是否休息日（假期币抵扣） */
   restDay: boolean
   /** 打卡模式（R4）：normal 正常 / minimal 最低版本保底；旧数据规范化默认 normal */
-  mode: 'normal' | 'minimal'
+  mode: 'normal' | 'minimal' | 'quit-maintain'
+  /**
+   * 打卡前的习惯状态快照（BUG-2：删除当天记录时完整回滚用）。
+   * 旧数据（无此字段）删除时无法回滚习惯状态，仅移除记录并如实提示。
+   */
+  habitBefore?: HabitState
   createdAt: string
 }
 

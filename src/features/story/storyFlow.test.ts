@@ -12,6 +12,7 @@ import {
   classifyStatus,
   editTodayNote,
   deleteTodayCheckin,
+  buildMonthlySummary,
   STORY_STATUS_COLOR,
 } from './storyFlow'
 
@@ -96,7 +97,7 @@ describe('buildStoryTimeline 聚合', () => {
     expect(tl.restUses).toBe(1)
     // 全部状态色都有映射
     expect(Object.keys(STORY_STATUS_COLOR).sort()).toEqual(
-      ['休息', '最低版本', '未达标', '超额', '达标'],
+      ['休息', '戒除坚持', '最低版本', '未达标', '超额', '达标'],
     )
   })
 
@@ -159,5 +160,88 @@ describe('editTodayNote / deleteTodayCheckin 当天守卫', () => {
     const { storage } = makeDeps()
     expect(editTodayNote({ storage }, 'missing', '2026-08-27', 'x').error).toContain('不存在')
     expect(deleteTodayCheckin({ storage }, 'missing', '2026-08-27').error).toContain('不存在')
+  })
+
+  it('BUG-2：删除当天记录并回滚打卡前习惯快照（可重新打卡）', () => {
+    const { storage } = makeDeps()
+    const before: import('../../engine/types').HabitState = {
+      id: 'h1',
+      name: '俯卧撑',
+      direction: 'positive',
+      baseAmount: 1,
+      unit: '次',
+      cap: null,
+      progressStep: 3,
+      totalAmount: 6,
+      consistencyDays: 3,
+      formationDateList: ['2026-08-25'],
+      formationDays: 1,
+      isFormed: false,
+      vacationCoins: 2,
+      streakDays: 2,
+      lastCheckinDate: '2026-08-26',
+      actionCount: 3,
+      createdAt: '2026-08-20',
+    }
+    storage.upsertHabit(before)
+    // 模拟：今天打卡后 → 习惯状态已推进（快照仍为 before）
+    const after: import('../../engine/types').HabitState = {
+      ...before,
+      progressStep: 4,
+      totalAmount: 9,
+      actionCount: 4,
+      lastCheckinDate: '2026-08-27',
+    }
+    storage.upsertHabit(after)
+    storage.addCheckin({ ...seedCheckin(), habitBefore: before })
+
+    const r = deleteTodayCheckin({ storage }, storage.listCheckins()[0].id, '2026-08-27')
+    expect(r.ok).toBe(true)
+    expect(storage.listCheckins()).toHaveLength(0)
+    // 习惯状态回到打卡前快照
+    const habit = storage.getHabit('h1')!
+    expect(habit.progressStep).toBe(3)
+    expect(habit.totalAmount).toBe(6)
+    expect(habit.actionCount).toBe(3)
+    expect(habit.lastCheckinDate).toBe('2026-08-26')
+    expect(habit.vacationCoins).toBe(2)
+  })
+
+  it('BUG-2：旧数据无 habitBefore 时仅移除记录，不报错', () => {
+    const { storage } = makeDeps()
+    storage.addCheckin(seedCheckin())
+    const r = deleteTodayCheckin({ storage }, storage.listCheckins()[0].id, '2026-08-27')
+    expect(r.ok).toBe(true)
+    expect(storage.listCheckins()).toHaveLength(0)
+  })
+})
+
+describe('buildMonthlySummary 本月统计（P2-1）', () => {
+  it('聚合本月行动天数 / 打卡次数 / 总量 / 行动率', () => {
+    const checkins = [
+      { ...seedCheckin(), id: 'a', businessDate: '2026-08-01', amount: 2, targetAmount: 2 },
+      { ...seedCheckin(), id: 'b', businessDate: '2026-08-02', amount: 3, targetAmount: 3 },
+      { ...seedCheckin(), id: 'c', businessDate: '2026-08-02', restDay: true, amount: 0, targetAmount: 0 },
+      { ...seedCheckin(), id: 'd', businessDate: '2026-07-30', amount: 9, targetAmount: 9 }, // 上月，不计
+    ]
+    const s = buildMonthlySummary(checkins, '2026-08-27')
+    expect(s).not.toBeNull()
+    expect(s!.month).toBe('2026-08')
+    expect(s!.actionDays).toBe(2) // 8-01、8-02（休息日不计入行动）
+    expect(s!.checkins).toBe(3)
+    expect(s!.totalAmount).toBe(5)
+    // 本月已过 27 天，行动 2 天 → 行动率 ≈ 7%
+    expect(s!.actionRate).toBe(Math.round((2 / 27) * 100))
+    expect(s!.restUses).toBe(1)
+  })
+
+  it('本月无行动 → actionRate 为 null', () => {
+    const s = buildMonthlySummary([], '2026-08-27')
+    expect(s!.actionDays).toBe(0)
+    expect(s!.actionRate).toBeNull()
+  })
+
+  it('非法 today → 返回 null', () => {
+    expect(buildMonthlySummary([], 'bad')).toBeNull()
   })
 })

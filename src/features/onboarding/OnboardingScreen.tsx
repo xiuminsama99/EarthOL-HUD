@@ -129,6 +129,8 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
   const [auditGrowth, setAuditGrowth] = useState(5)
   const [auditSocial, setAuditSocial] = useState(5)
   const [auditWealth, setAuditWealth] = useState(5)
+  /** P2-2：人生审计滑块是否被用户动过——未动时不给「最低分板块」结论（默认全 5 是产品默认，非用户偏好） */
+  const [auditTouched, setAuditTouched] = useState(false)
   const [audit, setAudit] = useState<AuditScores | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -191,22 +193,24 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
           给现在的自己打个分（1-10，越满意越高）。<strong style={{ color: '#ffd27a' }}>最低分的地方，就是改变最见效的地方</strong>——
           它告诉你该从哪里开始。
         </p>
-        <AuditSlider label="身体" value={auditBody} onChange={setAuditBody} hint="运动 / 睡眠 / 饮食" />
-        <AuditSlider label="成长" value={auditGrowth} onChange={setAuditGrowth} hint="学习 / 技能 / 认知" />
-        <AuditSlider label="人际" value={auditSocial} onChange={setAuditSocial} hint="关系 / 社交 / 表达" />
-        <AuditSlider label="财富" value={auditWealth} onChange={setAuditWealth} hint="收入 / 储蓄 / 理财" />
-        <div
-          style={{
-            marginTop: 12,
-            padding: '10px 12px',
-            borderRadius: 8,
-            background: '#153a2c',
-            color: '#7ee0a8',
-            fontSize: 13,
-          }}
-        >
-          你的最低分板块是：{auditLowest.label}（{auditLowest.score} 分），从这里开始改变。
-        </div>
+        <AuditSlider label="身体" value={auditBody} onChange={(v) => { setAuditBody(v); setAuditTouched(true) }} hint="运动 / 睡眠 / 饮食" />
+        <AuditSlider label="成长" value={auditGrowth} onChange={(v) => { setAuditGrowth(v); setAuditTouched(true) }} hint="学习 / 技能 / 认知" />
+        <AuditSlider label="人际" value={auditSocial} onChange={(v) => { setAuditSocial(v); setAuditTouched(true) }} hint="关系 / 社交 / 表达" />
+        <AuditSlider label="财富" value={auditWealth} onChange={(v) => { setAuditWealth(v); setAuditTouched(true) }} hint="收入 / 储蓄 / 理财" />
+        {auditTouched && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: '#153a2c',
+              color: '#7ee0a8',
+              fontSize: 13,
+            }}
+          >
+            你的最低分板块是：{auditLowest.label}（{auditLowest.score} 分），从这里开始改变。
+          </div>
+        )}
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
           <button
             type="button"
