@@ -26,11 +26,12 @@ export const PET_BREEDS: PetBreed[] = [
 
 export const MOOD_MAX = 100
 export const MOOD_MIN = 0
-/** 心情分段文案（0-100），纯函数供 UI 复用 */
-export function moodLabel(mood: number): string {
+/** 心情分段文案（0-100），纯函数供 UI 复用（R10b-4：低于 40 用「想你了」低落文案） */
+export function moodLabel(mood: number, name = ''): string {
   if (mood >= 80) return '元气满满'
   if (mood >= 50) return '心情不错'
-  if (mood >= 20) return '一般般'
+  if (mood >= 40) return '一般般'
+  if (mood < 40 && name) return `${name}有点想你`
   return '有点低落'
 }
 
@@ -41,14 +42,14 @@ export const MOOD_INITIAL = 60
 export type PetMoodEvent =
   | 'checkin' // 正常达标打卡
   | 'checkin-extra' // 超额（做得更多）
-  | 'checkin-backoff' // 缺勤归来打卡（漏卡低落）
+  | 'checkin-backoff' // 缺勤归来打卡（R10b-4：回归是开心，不再低落）
   | 'rest-day' // 假期币休息日
 
-/** 心情规则表（MVP 简单规则；后续可换成状态镜像 / 更平滑的曲线） */
+/** 心情规则表（R10b-4：缺勤归来改为 +6，比日常 +4 略高，体现「你回来了」） */
 const MOOD_DELTAS: Record<PetMoodEvent, number> = {
   'checkin': 4,
   'checkin-extra': 6,
-  'checkin-backoff': -4,
+  'checkin-backoff': 6,
   'rest-day': 0,
 }
 
@@ -57,6 +58,22 @@ export function nextMood(current: number, event: PetMoodEvent): number {
   const delta = MOOD_DELTAS[event]
   return Math.max(MOOD_MIN, Math.min(MOOD_MAX, current + delta))
 }
+
+// ---- R10b-4 A-1：心情衰减（连漏卡「想你」但不惩罚归零） ----
+/** 每漏一天扣除的心情 */
+export const MOOD_DECAY_PER_DAY = 2
+/** 连漏心情衰减封顶（不归零，符合「不惩罚」哲学） */
+export const MOOD_DECAY_CAP = 20
+
+/** 计算连漏衰减后的心情（纯函数）：漏 N 天扣 N*2，封顶 -20，不越过 MOOD_MIN */
+export function moodAfterDecay(current: number, missedDays: number): number {
+  const decay = Math.min(Math.max(0, missedDays) * MOOD_DECAY_PER_DAY, MOOD_DECAY_CAP)
+  return Math.max(MOOD_MIN, current - decay)
+}
+
+/** 摸头互动每天一次，心情 +MOOD_PET_DELTA */
+export const MOOD_PET_DELTA = 2
+export const PET_PET_ERROR = '它今天已经蹭过你手心了'
 
 export interface PetDeps {
   storage: Pick<EarthStorage, 'listPets' | 'upsertPet'>
@@ -91,6 +108,8 @@ export function adoptPet(deps: PetDeps, input: AdoptInput): AdoptResult {
     breed: breed.id,
     name,
     mood: MOOD_INITIAL,
+    lastMoodSettleDate: null,
+    lastPettedDate: null,
     createdAt: new Date().toISOString(),
   }
   deps.storage.upsertPet(pet)
@@ -114,4 +133,63 @@ export function recordPetMood(deps: PetDeps, event: PetMoodEvent): Pet | null {
   const next: Pet = { ...pet, mood: nextMood(pet.mood, event) }
   deps.storage.upsertPet(next)
   return next
+}
+
+// ---- R10b-4：心情衰减结算 + 摸头互动 + 成长形态标志 ----
+
+/** YYYY-MM-DD 之间的日历日差（b - a），通用日期工具 */
+function calendarDaysBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number)
+  const [by, bm, bd] = b.split('-').map(Number)
+  const ta = Date.UTC(ay, am - 1, ad)
+  const tb = Date.UTC(by, bm - 1, bd)
+  return Math.round((tb - ta) / 86_400_000)
+}
+
+export interface PetDecayResult {
+  pet: Pet | null
+  /** 本次结算的漏卡天数（>0 表示有衰减发生） */
+  settledDays: number
+}
+
+/**
+ * 心情衰减结算（每天打开主界面时调用一次，幂等）。
+ * 距上次结算（lastMoodSettleDate）超过 1 天（即完整漏了一天）才衰减：
+ * 每漏一天 moodAfterDecay -2，封顶 -20，不归零；更新 lastMoodSettleDate 为今日。
+ * 第一天（尚未结算过）仅记录结算日，不衰减（避免领养当天无端掉心情）。
+ */
+export function settlePetMoodDecay(deps: PetDeps, businessDate: string): PetDecayResult {
+  const pet = getPet(deps)
+  if (!pet) return { pet: null, settledDays: 0 }
+  const last = pet.lastMoodSettleDate ?? null
+  if (!last) {
+    const first: Pet = { ...pet, lastMoodSettleDate: businessDate }
+    deps.storage.upsertPet(first)
+    return { pet: first, settledDays: 0 }
+  }
+  // 完整漏卡天数 = 两个业务日之间差 - 1（当天未结算不算漏；同一天/昨天均不衰减）
+  const missedDays = Math.max(0, calendarDaysBetween(last, businessDate) - 1)
+  const next: Pet = {
+    ...pet,
+    mood: moodAfterDecay(pet.mood, missedDays),
+    lastMoodSettleDate: businessDate,
+  }
+  deps.storage.upsertPet(next)
+  return { pet: next, settledDays: missedDays }
+}
+
+/** 摸摸头互动：每天一次，心情 +2；当天已互动被拒（不消耗、状态不变） */
+export function petPet(deps: PetDeps, businessDate: string): { pet: Pet | null; error: string | null } {
+  const pet = getPet(deps)
+  if (!pet) return { pet: null, error: '还没有宠物伙伴' }
+  if (pet.lastPettedDate === businessDate) {
+    return { pet, error: PET_PET_ERROR }
+  }
+  const next: Pet = {
+    ...pet,
+    mood: Math.max(MOOD_MIN, Math.min(MOOD_MAX, pet.mood + MOOD_PET_DELTA)),
+    lastPettedDate: businessDate,
+  }
+  deps.storage.upsertPet(next)
+  return { pet: next, error: null }
 }

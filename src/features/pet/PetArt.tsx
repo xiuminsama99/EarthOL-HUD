@@ -68,9 +68,24 @@ function Dino() {
   )
 }
 
-/** 按品种 id 渲染形象 */
-export function PetArt({ breed }: { breed: string }) {
-  if (breed === 'cat') return <Cat />
-  if (breed === 'dog') return <Dog />
-  return <Dino />
+/** 按品种 id 渲染形象；formed（已养成）时叠加成长装饰（兑现「陪你 365 天」的成长承诺） */
+export function PetArt({ breed, formed = false }: { breed: string; formed?: boolean }) {
+  return (
+    <>
+      {breed === 'cat' ? <Cat /> : breed === 'dog' ? <Dog /> : <Dino />}
+      {formed && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -6,
+            right: -6,
+            fontSize: 16,
+            filter: 'drop-shadow(0 0 2px #ffd27a)',
+          }}
+        >
+          ✨
+        </span>
+      )}
+    </>
+  )
 }

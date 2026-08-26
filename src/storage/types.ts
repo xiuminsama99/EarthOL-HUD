@@ -73,14 +73,18 @@ export interface CheckinRecord {
   createdAt: string
 }
 
-/** 宠物（对应 pets 表，工单 04 落地） */
+/** 宠物（对应 pets 表，工单 04 落地；R10b-4 增加情感化字段） */
 export interface Pet {
   id: string
   /** 品种 */
   breed: string
   name: string
-  /** 心情值（0-100），后续工单驱动 */
+  /** 心情值（0-100），打卡事件 + 衰减 + 摸头驱动 */
   mood: number
+  /** 最近一次心情结算的业务日 YYYY-MM-DD（R10b-4：连漏衰减按此结算；旧数据缺失视为 null） */
+  lastMoodSettleDate?: string | null
+  /** 最近一次摸头互动的业务日 YYYY-MM-DD（R10b-4：每天一次，同日重复被拒；旧数据缺失视为 null） */
+  lastPettedDate?: string | null
   createdAt: string
 }
 

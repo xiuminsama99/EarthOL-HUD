@@ -12,8 +12,9 @@ import { earthStorage } from '../../storage/storage'
 import { businessDateFromSource, timeProvider } from '../../time/timeProvider'
 import type { TimeSource } from '../../time/timeProvider'
 import { PetCard } from '../pet/PetCard'
-import { recordPetMood } from '../pet/petFlow'
+import { recordPetMood, settlePetMoodDecay } from '../pet/petFlow'
 import type { PetMoodEvent } from '../pet/petFlow'
+import { StoryPanel } from '../story/StoryPanel'
 import {
   DEFAULT_REMINDER_TIME,
   isValidReminderTime,
@@ -92,6 +93,8 @@ function HabitScreen() {
   const [editProfileOpen, setEditProfileOpen] = useState(false)
   const [editIdentity, setEditIdentity] = useState('')
   const [editGoal, setEditGoal] = useState('')
+  /** R10b-4：「我的故事」时间线开关 */
+  const [storyOpen, setStoryOpen] = useState(false)
 
   /** R6：schedule 最新值供定时器闭包读取（interval 只注册一次） */
   const scheduleRef = useRef(schedule)
@@ -187,6 +190,14 @@ function HabitScreen() {
     () => (timeSource ? businessDateFromSource(timeSource, schedule) : null),
     [timeSource, schedule],
   )
+
+  /** R10b-4：每天打开主界面结算一次宠物连漏衰减（幂等；首次仅记录不衰减）；结算后刷新以显示新心情 */
+  useEffect(() => {
+    if (!businessDate) return
+    settlePetMoodDecay({ storage: earthStorage }, businessDate)
+    bump()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 每个业务日只结算一次
+  }, [businessDate])
   /** R-4：最近 7 天行动率基于注入的业务日计算 */
   const scale = useMemo(
     () => computeScaleData(habits, checkins, businessDate),
@@ -436,7 +447,7 @@ function HabitScreen() {
     <main style={panel}>
       <h1 style={{ marginTop: 0, fontSize: 20 }}>地球online玩家控制台</h1>
 
-      <PetCard refreshKey={refresh} />
+      <PetCard refreshKey={refresh} onChanged={bump} />
 
       <ScalePanel
         scale={scale}
@@ -569,6 +580,27 @@ function HabitScreen() {
         <>
           {/* 工单 13：一年之约——把等差数列的复利力量可视化（主线习惯区上方） */}
           <AnnualGoalPanel habit={habit} businessDate={businessDate} />
+
+          {/* R10b-4：「我的故事」入口——打卡语可回看（历史只读，当天可编辑/删除） */}
+          <button
+            type="button"
+            onClick={() => setStoryOpen(true)}
+            style={{
+              width: '100%',
+              marginBottom: 16,
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px dashed #2c2c4a',
+              background: 'transparent',
+              color: '#8b8ba3',
+              fontSize: 13,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            📖 我的故事 · 回看你的行动日记
+          </button>
+
           <HabitPanel
             habit={habit}
             plan={plan}
@@ -667,6 +699,15 @@ function HabitScreen() {
         >
           {zeroTarget ? '已戒除完成 🎉' : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
         </button>
+      )}
+
+      {/* R10b-4：「我的故事」全屏时间线 */}
+      {storyOpen && businessDate && (
+        <StoryPanel
+          businessDate={businessDate}
+          onChanged={bump}
+          onClose={() => setStoryOpen(false)}
+        />
       )}
     </main>
   )

@@ -316,6 +316,31 @@ export class EarthStorage {
     return habitId === undefined ? all : all.filter((c) => c.habitId === habitId)
   }
 
+  /** 更新单条打卡记录的 note（R10b-4 我的故事：当天条可编辑，其余字段只读）；返回更新后的记录，未找到返回 null */
+  updateCheckinNote(id: string, note: string): CheckinRecord | null {
+    let updated: CheckinRecord | null = null
+    this.update((d) => ({
+      ...d,
+      checkins: d.checkins.map((c) => {
+        if (c.id !== id) return c
+        updated = { ...c, note }
+        return updated
+      }),
+    }))
+    return updated
+  }
+
+  /** 删除单条打卡记录（R10b-4 我的故事：仅允许删除当天条，历史只读）；返回被删除的记录，未找到返回 null */
+  removeCheckin(id: string): CheckinRecord | null {
+    let removed: CheckinRecord | null = null
+    this.update((d) => {
+      const target = d.checkins.find((c) => c.id === id) ?? null
+      removed = target
+      return { ...d, checkins: d.checkins.filter((c) => c.id !== id) }
+    })
+    return removed
+  }
+
   // ---- 宠物 / 资产 / 存钱账户 / 账单 ----
   listPets(): Pet[] {
     return this.read().pets
