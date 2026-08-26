@@ -940,10 +940,11 @@ function HabitPanel(props: HabitPanelProps) {
   const annualGoal = props.annualGoal?.trim()
   /** UX-7：戒除类习惯目标触底 0 → 完成态 */
   const zeroTarget = plan.target === 0 && habit.direction === 'negative'
-  /** UX-13：超额概念对戒除习惯无意义——只保留「刚好达标」快捷打卡 */
-  const quickExtras = habit.direction === 'positive' ? [0, 1, 2, 5] : [0]
   /** P1-4：今日已完成 → 全部打卡入口置灰 */
   const done = props.todayChecked
+  /** R12 P2（工单 19）：打卡入口收敛——「多做了？/今天不想做？」默认收起，减少 8 入口视觉噪音 */
+  const [overdoOpen, setOverdoOpen] = useState(false)
+  const [restOpen, setRestOpen] = useState(false)
 
   return (
     <div>
@@ -1036,163 +1037,206 @@ function HabitPanel(props: HabitPanelProps) {
         </p>
       )}
 
-      {/* N1：戒除归 0 完成态下隐藏手动打卡区（「刚好达标=置0」与「完成量至少1」自相矛盾；
-          手动输 ≥1 又产生「超额 X 中 0 已存为假期币」怪异文案）——只保留底部一键打卡与休息/最低版本 */}
+      {/* N1：戒除归 0 完成态下隐藏手动打卡区——只保留底部一键打卡（主 CTA）与休息/最低版本
+          R12 P2（工单 19）：打卡入口收敛——主路径（一键打卡 + 打卡语）留明面不藏；
+          低频出口（多做了=储蓄 / 不想做=休息+保底）收进默认折叠，减少 8 入口视觉噪音 */}
       {!zeroTarget && (
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-            今日完成量
-          </label>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={props.amount}
-            disabled={done}
-            onChange={(e) => props.setAmount(e.target.value)}
-            placeholder={`今日目标 ${plan.target}`}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #2c2c4a',
-              background: done ? '#1b1b33' : '#1b1b33',
-              color: done ? '#5a5a74' : '#e5e5f0',
-              fontSize: 16,
-              opacity: done ? 0.55 : 1,
-            }}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            {quickExtras.map((extra) => (
-              <button
-                key={extra}
-                type="button"
-                disabled={done}
-                onClick={() => props.onQuickCheckin(plan.target + extra)}
-                style={{
-                  flex: 1,
-                  padding: '6px 0',
-                  borderRadius: 6,
-                  border: '1px solid #2c2c4a',
-                  background: done ? '#2c2c4a' : '#1b1b33',
-                  color: done ? '#5a5a74' : extra === 0 ? '#e5e5f0' : '#d9b64a',
-                  fontSize: 12,
-                  cursor: done ? 'default' : 'pointer',
-                }}
-              >
-                {extra === 0 ? '刚好达标' : `多做了 ${extra}（储蓄）`}
-              </button>
-            ))}
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
+              打卡语
+            </label>
+            <textarea
+              value={props.note}
+              onChange={(e) => props.setNote(e.target.value)}
+              placeholder={props.autoNote}
+              rows={2}
+              maxLength={200}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid #2c2c4a',
+                background: '#1b1b33',
+                color: '#e5e5f0',
+                fontSize: 14,
+                resize: 'vertical',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ fontSize: 11, color: '#8b8ba3', marginTop: 4 }}>
+              默认自动生成，也可以自己改：{props.autoNote}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 6 }}>
-            点「刚好达标」或「多做了 N」会直接打卡；想输入精确值请在框里填。
+
+          {props.error && (
+            <p role="alert" style={{ color: '#ff7a7a', fontSize: 13 }}>
+              {props.error}
+            </p>
+          )}
+
+          {/* 【多做了？】折叠：多做 N（储蓄）+ 精确输入，默认收起 */}
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setOverdoOpen((v) => !v)}
+              aria-expanded={overdoOpen}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #d9b64a',
+                background: 'rgba(217,182,74,0.08)',
+                color: '#d9b64a',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {overdoOpen ? '▾' : '▸'} 多做了？存一张休息券（储蓄）
+            </button>
+            {overdoOpen && (
+              <div style={{ marginTop: 8 }}>
+                {habit.direction === 'positive' && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    {[1, 2, 5].map((extra) => (
+                      <button
+                        key={extra}
+                        type="button"
+                        disabled={done}
+                        onClick={() => props.onQuickCheckin(plan.target + extra)}
+                        style={{
+                          flex: 1,
+                          padding: '6px 0',
+                          borderRadius: 6,
+                          border: '1px solid #2c2c4a',
+                          background: done ? '#2c2c4a' : '#1b1b33',
+                          color: done ? '#5a5a74' : '#d9b64a',
+                          fontSize: 12,
+                          cursor: done ? 'default' : 'pointer',
+                        }}
+                      >
+                        多做 {extra}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
+                  精确完成量
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={props.amount}
+                  disabled={done}
+                  onChange={(e) => props.setAmount(e.target.value)}
+                  placeholder={`今日目标 ${plan.target}`}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #2c2c4a',
+                    background: '#1b1b33',
+                    color: done ? '#5a5a74' : '#e5e5f0',
+                    fontSize: 16,
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={done}
+                  onClick={props.onCheckin}
+                  style={{
+                    width: '100%',
+                    marginTop: 8,
+                    padding: '12px',
+                    borderRadius: 8,
+                    border: '1px solid #d9b64a',
+                    background: done ? '#2c2c4a' : 'rgba(217,182,74,0.1)',
+                    color: done ? '#5a5a74' : '#ffd27a',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: done ? 'default' : 'pointer',
+                  }}
+                >
+                  按输入量打卡
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-      )}
 
-      {!zeroTarget && (
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>
-            打卡语
-          </label>
-          <textarea
-            value={props.note}
-            onChange={(e) => props.setNote(e.target.value)}
-            placeholder={props.autoNote}
-            rows={2}
-            maxLength={200}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #2c2c4a',
-              background: '#1b1b33',
-              color: '#e5e5f0',
-              fontSize: 14,
-              resize: 'vertical',
-              fontFamily: 'inherit',
-            }}
-          />
-          <div style={{ fontSize: 11, color: '#8b8ba3', marginTop: 4 }}>
-            默认自动生成，也可以自己改：{props.autoNote}
+          {/* 【今天不想做？】折叠：休息（用券）+ 保底（做 1 个就算数），两行小字说明差异，默认收起 */}
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setRestOpen((v) => !v)}
+              aria-expanded={restOpen}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #2c8a5a',
+                background: 'rgba(44,138,90,0.08)',
+                color: '#7ee0a8',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {restOpen ? '▾' : '▸'} 今天不想做？
+            </button>
+            {restOpen && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    disabled={done}
+                    onClick={props.onRestDay}
+                    title="消耗 1 张休息券，今日不打卡也不缺勤；没有券时点按会提示如何获取"
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: 8,
+                      border: '1px solid #2c2c4a',
+                      background: done ? '#2c2c4a' : '#1b1b33',
+                      color: done ? '#5a5a74' : '#e5e5f0',
+                      fontSize: 13,
+                      cursor: done ? 'default' : 'pointer',
+                    }}
+                  >
+                    休息（用 1 张休息券）
+                  </button>
+                  <button
+                    type="button"
+                    disabled={done}
+                    onClick={props.onMinimalCheckin}
+                    title="状态差也没关系：做 1 个也算行动，明天从原目标继续，养成进度不丢"
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: 8,
+                      border: '1px solid #2c8a5a',
+                      background: done ? '#2c2c4a' : '#153a2c',
+                      color: done ? '#5a5a74' : '#7ee0a8',
+                      fontSize: 13,
+                      cursor: done ? 'default' : 'pointer',
+                    }}
+                  >
+                    做 1 个就算数（免券）
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 6, lineHeight: 1.7 }}>
+                  「休息」用 1 张休息券：今天彻底放假，不计入 7 天行动率
+                  <br />
+                  「做 1 个就算数」太累时保底：免券，但算作行动日（会拉低你的 7 天行动率）
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
-
-      {props.error && (
-        <p role="alert" style={{ color: '#ff7a7a', fontSize: 13 }}>
-          {props.error}
-        </p>
-      )}
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        {!zeroTarget && (
-          <button
-            type="button"
-            disabled={done}
-            onClick={props.onCheckin}
-            style={{
-              flex: 1,
-              padding: '12px',
-              borderRadius: 8,
-              border: 'none',
-              background: done ? '#2c2c4a' : '#7c5cff',
-              color: done ? '#5a5a74' : '#fff',
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: done ? 'default' : 'pointer',
-            }}
-          >
-            按输入量打卡
-          </button>
-        )}
-        <button
-          type="button"
-          disabled={done}
-          onClick={props.onRestDay}
-          title="消耗 1 张休息券，今日不打卡也不缺勤；没有券时点按会提示如何获取"
-          style={{
-            padding: '12px 14px',
-            borderRadius: 8,
-            border: '1px solid #2c2c4a',
-            background: done ? '#2c2c4a' : '#1b1b33',
-            color: done ? '#5a5a74' : '#e5e5f0',
-            fontSize: 14,
-            cursor: done ? 'default' : 'pointer',
-          }}
-        >
-          休息
-        </button>
-      </div>
-      {/* UX-14：两个「今天不想做」出口的人话区分（P1-2：明示行动率差异，避免「休息券是废币」） */}
-      <div style={{ fontSize: 11, color: '#5a5a74', marginTop: 6, lineHeight: 1.7 }}>
-        「休息」用 1 张休息券：今天彻底放假，不计入 7 天行动率
-        <br />
-        「做 1 个就算数」太累时保底：免券，但算作行动日（会拉低你的 7 天行动率）
-      </div>
-
-      {/* 最低版本（R4 + UX-12/14 人话化）：状态差保底行动，不丢养成进度（防流失最后一道防线） */}
-      <button
-        type="button"
-        disabled={done}
-        onClick={props.onMinimalCheckin}
-        title="状态差也没关系：做 1 个也算行动，明天从原目标继续，养成进度不丢"
-        style={{
-          width: '100%',
-          marginTop: 8,
-          padding: '10px 0',
-          borderRadius: 8,
-          border: '1px solid #2c8a5a',
-          background: done ? '#2c2c4a' : '#153a2c',
-          color: done ? '#5a5a74' : '#7ee0a8',
-          fontSize: 13,
-          cursor: done ? 'default' : 'pointer',
-        }}
-      >
-        今天太累了？做 1 个就算数（不丢进度）
-      </button>
 
       <div
         style={{
