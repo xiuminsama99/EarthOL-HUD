@@ -35,7 +35,7 @@ import {
 } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
-import { yearlyEffect } from './habitTemplates'
+import { AnnualGoalPanel } from './AnnualGoalPanel'
 import { computeScaleData } from '../scale/scaleFlow'
 import { ScalePanel } from '../scale/ScalePanel'
 import { HeatmapPanel } from '../heatmap/HeatmapPanel'
@@ -554,30 +554,34 @@ function HabitScreen() {
           initialDirection={badHabitDesc ? 'negative' : undefined}
         />
       ) : (
-        <HabitPanel
-          habit={habit}
-          plan={plan}
-          todayChecked={todayChecked}
-          autoNote={autoNote}
-          annualGoal={annualGoal}
-          amount={amount}
-          setAmount={setAmount}
-          note={note}
-          setNote={setNote}
-          capInput={capInput}
-          setCapInput={setCapInput}
-          renameInput={renameInput}
-          setRenameInput={setRenameInput}
-          error={error}
-          feedback={feedback}
-          onCheckin={onCheckin}
-          onQuickCheckin={onQuickCheckin}
-          onMinimalCheckin={onMinimalCheckin}
-          onRestDay={onRestDay}
-          onLockCap={onLockCap}
-          onRename={onRename}
-          onDelete={onDelete}
-        />
+        <>
+          {/* 工单 13：一年之约——把等差数列的复利力量可视化（主界面习惯区上方） */}
+          <AnnualGoalPanel habit={habit} businessDate={businessDate} />
+          <HabitPanel
+            habit={habit}
+            plan={plan}
+            todayChecked={todayChecked}
+            autoNote={autoNote}
+            annualGoal={annualGoal}
+            amount={amount}
+            setAmount={setAmount}
+            note={note}
+            setNote={setNote}
+            capInput={capInput}
+            setCapInput={setCapInput}
+            renameInput={renameInput}
+            setRenameInput={setRenameInput}
+            error={error}
+            feedback={feedback}
+            onCheckin={onCheckin}
+            onQuickCheckin={onQuickCheckin}
+            onMinimalCheckin={onMinimalCheckin}
+            onRestDay={onRestDay}
+            onLockCap={onLockCap}
+            onRename={onRename}
+            onDelete={onDelete}
+          />
+        </>
       )}
 
       {/* 底部固定「一键打卡」（工单 06）：一天只需要点一下；超额仍走卡片内快捷按钮
@@ -706,17 +710,7 @@ function HabitPanel(props: HabitPanelProps) {
         </div>
       )}
 
-      {/* R5：年度累计效果（持续激励：按当前目标量换算 365 天总量） */}
-      <p
-        style={{
-          color: '#7ee0a8',
-          fontSize: 13,
-          margin: '0 0 12px',
-          fontWeight: 600,
-        }}
-      >
-        {zeroTarget ? '已达成 🎉' : `${yearlyEffect(plan.target, habit.unit, habit.direction, plan.locked)}，坚持就会抵达`}
-      </p>
+      {/* R5：年度累计效果（工单 13 起由上方「一年之约」面板呈现年度大数；此处不再重复展示数字） */}
 
       {props.feedback && (
         <p

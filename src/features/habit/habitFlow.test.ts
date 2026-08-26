@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { EarthStorage } from '../../storage/storage'
+import { projectAnnual } from '../../engine/engine'
 import type { CheckinResult, HabitState } from '../../engine/types'
 import {
   createHabit,
@@ -16,6 +17,7 @@ import {
   setCap,
   buildOverachievementNotice,
   buildCheckinResultNotice,
+  buildAnnualPanelCopy,
   isZeroTarget,
   deleteHabit,
   renameHabit,
@@ -958,5 +960,81 @@ describe('切换作息（N3：主界面与诊断面板共用，B1 守卫不可�
     expect(outcome.result.status).toBe('rejected')
     expect(outcome.result.reason).toBe('schedule-switched-today')
     expect(outcome.record).toBeNull()
+  })
+})
+
+describe('R10b-1 一年之约面板文案（buildAnnualPanelCopy）', () => {
+  function h(overrides: Partial<HabitState> = {}): HabitState {
+    return {
+      id: 'h1',
+      name: '俯卧撑',
+      direction: 'positive',
+      baseAmount: 1,
+      unit: '个',
+      cap: null,
+      progressStep: 0,
+      totalAmount: 0,
+      consistencyDays: 0,
+      formationDateList: [],
+      formationDays: 0,
+      isFormed: false,
+      vacationCoins: 0,
+      lastCheckinDate: null,
+      actionCount: 0,
+      createdAt: '2026-01-01',
+      ...overrides,
+    }
+  }
+
+  it('正向未固定：理想大数 = 66795，副行「每天只多一点点」，无上限说明', () => {
+    const p = projectAnnual(h(), '2026-01-01')
+    const c = buildAnnualPanelCopy(p, h())
+    expect(c.headline).toBe('66,795 个')
+    expect(c.progressLabel).toContain('/ 66,795')
+    expect(c.sub).toContain('今天 1 个（第 1 天）')
+    expect(c.sub).toContain('每天只多一点点')
+    expect(c.warn).toBeNull()
+  })
+
+  it('第 30 天全勤：无泄漏警告（projected == ideal）', () => {
+    const habit = h({ progressStep: 29, totalAmount: 465 })
+    const p = projectAnnual(habit, '2026-01-30')
+    const c = buildAnnualPanelCopy(p, habit)
+    expect(c.warn).toBeNull() // 全勤不吓人
+    expect(c.sub).toContain('今天 30 个（第 30 天）')
+  })
+
+  it('泄漏回退：给出「年度预估少了 Z」激励提示（Z = ideal - projected）', () => {
+    const habit = h({ progressStep: 29, totalAmount: 460, lastCheckinDate: '2026-01-27' })
+    const p = projectAnnual(habit, '2026-01-30')
+    const c = buildAnnualPanelCopy(p, habit)
+    expect(c.warn).not.toBeNull()
+    expect(c.warn).toContain('年度预估少了')
+    expect(c.warn).toContain('大数，继续就好')
+  })
+
+  it('锁死 cap：副行含「上限」，理想 = cap×365', () => {
+    const habit = h({ cap: 10 })
+    const p = projectAnnual(habit, '2026-01-01')
+    const c = buildAnnualPanelCopy(p, habit)
+    expect(c.headline).toBe('3,650 个')
+    expect(c.sub).toContain('上限 10')
+  })
+
+  it('戒除（反向）习惯：用「省出」口径，进度条为空，无泄漏警告', () => {
+    const habit = h({ direction: 'negative', baseAmount: 5, progressStep: 3 })
+    const p = projectAnnual(habit, '2026-01-13')
+    const c = buildAnnualPanelCopy(p, habit, '坚持一年，每天能省出 730 分钟')
+    expect(c.headline).toBe('坚持一年，每天能省出 730 分钟')
+    expect(c.progressLabel).toBeNull() // 无进度条（累计对戒除无意义）
+    expect(c.sub).toContain('每天少做一点点')
+    expect(c.warn).toBeNull()
+  })
+
+  it('单位兜底：空单位用「次」', () => {
+    const habit = h({ unit: '   ' })
+    const p = projectAnnual(habit, '2026-01-01')
+    const c = buildAnnualPanelCopy(p, habit)
+    expect(c.headline).toBe('66,795 次')
   })
 })

@@ -7,7 +7,7 @@
  * 依赖注入：storage 与时间参数由调用方传入，测试注入 Map backend 的
  * EarthStorage 与固定时间即可覆盖完整流程（建习惯 → 打卡 → 锁死 → 超额）。
  */
-import { checkIn, getDailyTarget, lockCap, resolveBusinessDate } from '../../engine/engine'
+import { checkIn, getDailyTarget, lockCap, projectAnnual, resolveBusinessDate } from '../../engine/engine'
 
 /** 徽章文案（P1-1）：方向 + 等差数列/固定态的人话标签，UI 直接消费 */
 export function habitBadgeLabel(direction: HabitDirection, locked: boolean): string {
@@ -150,6 +150,57 @@ export function buildOverachievementNotice(
   vacationCoins: number,
 ): string {
   return `储蓄日：超额 ${overAmount} 中 ${coinsGained} 已存为休息券（当前 ${vacationCoins} 张）——进度冻结一天，不丢失`
+}
+
+/**
+ * 一年之约面板文案（工单 13）。
+ *
+ * 把等差数列的复利力量可视化：理想年度总量（愿景大数）+ 已累计进度 +
+ * 小目标（今日量）/ 上限（cap）副行；泄漏回退时给出「年度预估少了 Z」的
+ * 激励性提示（不惩罚，总量依然巨大）。
+ *
+ * 正向习惯：显示「坚持一年 = X 单位」+ 进度条。
+ * 戒除（反向）习惯：无法用「累计总量」表述（ideal/projected 为 0），
+ * 头部改用「每天能省出」口径，避免反语义。
+ *
+ * @param projection 引擎投影结果
+ * @param habit 习惯状态
+ * @param yearlyEffectCopy 戒除习惯时代替「坚持一年」大数的文案（habitTemplates.yearlyEffect 产物）
+ */
+export function buildAnnualPanelCopy(
+  projection: ReturnType<typeof projectAnnual>,
+  habit: HabitState,
+  yearlyEffectCopy?: string,
+): {
+  headline: string
+  progressLabel: string | null
+  sub: string
+  warn: string | null
+} {
+  const unit = habit.unit?.trim() || '次'
+  const fmt = (n: number): string => {
+    if (!Number.isFinite(n)) return '0'
+    return Math.floor(n).toLocaleString('zh-CN')
+  }
+  // 戒除习惯：用「省出」口径的头部大数（理想/预计为 0，不渲染进度条）
+  if (habit.direction === 'negative') {
+    return {
+      headline: yearlyEffectCopy ?? `坚持一年，每天能省出 ${fmt(projection.todayTarget * 365)} ${unit}`,
+      progressLabel: null,
+      sub: `今天 ${fmt(projection.todayTarget)} ${unit}（第 ${projection.dayIndex} 天）${habit.cap !== null ? ` · 上限 ${habit.cap}` : ' · 每天少做一点点'}`,
+      warn: null,
+    }
+  }
+  // 正向习惯：理想愿景大数
+  const headline = `${fmt(projection.idealAnnual)} ${unit}`
+  const progressLabel = `${fmt(projection.achievedTotal)} / ${fmt(projection.idealAnnual)} ${unit}`
+  const sub = `今天 ${fmt(projection.todayTarget)} ${unit}（第 ${projection.dayIndex} 天）${habit.cap !== null ? ` · 上限 ${habit.cap}` : ' · 每天只多一点点'}`
+  // 泄漏回退：年度预估少于理想愿景 → 给激励性提示（Z = ideal - projected）
+  const warn =
+    projection.projectedAnnual > 0 && projection.projectedAnnual < projection.idealAnnual
+      ? `漏了几天，年度预估少了 ${fmt(projection.idealAnnual - projection.projectedAnnual)} ${unit}——但一年依然是 ${fmt(projection.idealAnnual)} ${unit} 大数，继续就好`
+      : null
+  return { headline, progressLabel, sub, warn }
 }
 
 /**

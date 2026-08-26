@@ -29,6 +29,9 @@ export const FORMATION_THRESHOLD = 14
 /** 连续达标 7 天赠 1 张休息券 */
 export const STREAK_COIN_DAYS = 7
 
+/** 年度投影周期：一年之约 365 天 */
+export const ANNUAL_PROJECTION_DAYS = 365
+
 /**
  * 夜间工作者的业务日边界小时：凌晨 0:00-4:59 的操作归属昨日，
  * 5:00 起归属当日。白天工作者任何时刻归属当日。
@@ -382,3 +385,106 @@ export function lockCap(habit: HabitState, cap: number): HabitState {
 
 /** 习惯方向常量（供调用方与测试使用） */
 export const HABIT_DIRECTIONS: readonly HabitDirection[] = ['positive', 'negative']
+
+/**
+ * 年度投影结果（一年之约：把等差数列的复利力量可视化）。
+ * 正向习惯才有大数值；反向（戒除）习惯无法用「累计总量」表述，
+ * ideal/projected 恒为 0（UI 改用「每天能省出」口径，见 yearlyEffect）。
+ */
+export interface AnnualProjection {
+  /** 理想年度总量（第 1 天起理想轨迹 365 天总和；锁死后恒 cap×365）。反向恒 0 */
+  idealAnnual: number
+  /** 预计年度总量（已累计 + 未来按当前真实目标轨迹到第 365 天；漏卡回退后下降）。反向恒 0 */
+  projectedAnnual: number
+  /** 已累计总量（= habit.totalAmount） */
+  achievedTotal: number
+  /** 当前第几天（1-based，从创建业务日起算） */
+  dayIndex: number
+  /** 今日目标量（含缺勤回退；锁死后恒 cap） */
+  todayTarget: number
+}
+
+/** YYYY-MM-DD 是否合法业务日格式（projectAnnual 兜底用） */
+const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * 轨迹求和：Σ_{d=startDay}^{endDay} targetMet(d)
+ * - cap === Infinity（无上限）：纯等差，每日 +1
+ * - cap 有限：递增段后恒定封顶
+ * @param base 起始基准（第 1 天目标）
+ * @param cap  上限（Infinity 表示未锁死/无上限）
+ * @param startDay / endDay 起止日（1-based，endDay < startDay 返回 0）
+ */
+function sumTrajectory(base: number, cap: number, startDay: number, endDay: number): number {
+  if (endDay < startDay) return 0
+  const n = endDay - startDay + 1
+  // 无上限：纯等差和
+  if (cap === Infinity) {
+    const first = base + (startDay - 1)
+    const last = base + (endDay - 1)
+    return (n * (first + last)) / 2
+  }
+  // 目标从哪天起恒等于 cap：base + (d-1) >= cap → d >= cap - base + 1
+  const capDay = cap - base + 1
+  if (capDay <= startDay) return n * cap
+  if (capDay > endDay) {
+    const first = base + (startDay - 1)
+    const last = base + (endDay - 1)
+    return (n * (first + last)) / 2
+  }
+  // 部分递增、部分封顶
+  const incDays = capDay - startDay
+  const first = base + (startDay - 1)
+  const incTotal = (incDays * (first + (cap - 1))) / 2 // 递增段末项目标 = cap - 1
+  return incTotal + (n - incDays) * cap
+}
+
+/**
+ * 年度投影（一年之约，工单 13）。
+ *
+ * 语义（不虚假成功，正向前瞻）：
+ * - idealAnnual：理想愿景——从第 1 天起每天 +1 到第 365 天（cap 非空则封顶恒 cap），
+ *   全年累计总量。恒定不变，是「坚持一年 = X」的大目标。
+ * - projectedAnnual：更现实——已累计 totalAmount + 从明天起按当前真实目标（含缺勤回退）
+ *   每天 +1 到第 365 天的预计新增。漏卡回退会让 todayTarget 变小 → 预计下降
+ *   （体现「从总数扣减」，但总量依然巨大）。
+ * - dayIndex：从创建业务日起的第几天（1-based）。无创建日/非法日期兜底 = 1。
+ *
+ * 反向（戒除）习惯无法以「累计量」表述，ideal/projected 恒为 0，UI 走 yearlyEffect
+ * 的「每天能省出」口径，避免出现「做了 66,795 个」这类反语义。
+ */
+export function projectAnnual(habit: HabitState, businessDate: string): AnnualProjection {
+  const validCreated = BUSINESS_DATE_RE.test(habit.createdAt)
+  const dayIndex = validCreated
+    ? Math.max(1, daysBetween(habit.createdAt, businessDate) + 1)
+    : 1
+  const todayTarget = getDailyTarget(habit, businessDate)
+
+  if (habit.direction === 'negative') {
+    return {
+      idealAnnual: 0,
+      projectedAnnual: 0,
+      achievedTotal: habit.totalAmount,
+      dayIndex,
+      todayTarget,
+    }
+  }
+
+  // 锁死（cap 非 null）：每天恒 cap；未锁死：每天 +1（cap 为 Infinity 表示无上限）
+  const cap = habit.cap === null ? Infinity : habit.cap
+  // 轨迹起点：锁死时从第 1 天起就是 cap（无递增段），未锁死时从 baseAmount 起递增
+  const trajectoryBase = habit.cap === null ? habit.baseAmount : habit.cap
+  const idealAnnual = sumTrajectory(trajectoryBase, cap, 1, ANNUAL_PROJECTION_DAYS)
+  // 从今天（含）到第 365 天的剩余天数；全勤达标时 projected 会与 ideal 相等
+  const remainingDays = Math.max(0, ANNUAL_PROJECTION_DAYS - dayIndex + 1)
+  const futureSum = sumTrajectory(todayTarget, cap, 1, remainingDays)
+  const projectedAnnual = habit.totalAmount + futureSum
+
+  return {
+    idealAnnual,
+    projectedAnnual,
+    achievedTotal: habit.totalAmount,
+    dayIndex,
+    todayTarget,
+  }
+}

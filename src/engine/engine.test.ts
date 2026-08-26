@@ -6,12 +6,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  ANNUAL_PROJECTION_DAYS,
   FORMATION_THRESHOLD,
   buildAutoNote,
   checkIn,
   getDailyTarget,
   lockCap,
   missedDays,
+  projectAnnual,
   resolveBusinessDate,
 } from './engine'
 import type { HabitState } from './types'
@@ -639,5 +641,94 @@ describe('R4：最低版本（minimal mode）', () => {
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, mode: 'minimal', note: '   ' })
     expect(r.status).toBe('rejected')
     expect(r.mode).toBe('minimal')
+  })
+})
+
+describe('年度投影 projectAnnual（工单 13：一年之约）', () => {
+  it('base=1 无上限：idealAnnual = 1+2+…+365 等差和 = 66795', () => {
+    const h = habit({ direction: 'positive', baseAmount: 1, createdAt: '2026-01-01' })
+    const p = projectAnnual(h, '2026-01-01')
+    expect(p.dayIndex).toBe(1)
+    expect(p.idealAnnual).toBe(66795)
+    expect(p.achievedTotal).toBe(0)
+    expect(p.todayTarget).toBe(1)
+  })
+
+  it('cap=30（锁死）：理想/预计恒为 cap×365（无递增段，因为锁死即每天恒 cap）', () => {
+    const h = habit({ direction: 'positive', baseAmount: 1, cap: 30, createdAt: '2026-01-01' })
+    const p = projectAnnual(h, '2026-01-01')
+    expect(p.idealAnnual).toBe(30 * 365)
+    expect(p.todayTarget).toBe(30)
+  })
+
+  it('第 30 天中途：projected = 已累计 + 按今日目标轨迹到第 365 天', () => {
+    // 已打卡 30 天累计 1+…+30 = 465；今日目标 31？第 30 天目标 = base1 + step29 = 30
+    // 设 progressStep=29（今日目标 30），已累计 465；剩余天数 = 365 - 30 + 1 = 336
+    // 轨迹：明日 31 … 第 365 天 365。sum = 30*(365+30)/2 - ... 用 /2 手算避免浮点
+    const todayTarget = getDailyTarget(habit({ progressStep: 29 }), '2026-01-30')
+    expect(todayTarget).toBe(30)
+    const h = habit({ direction: 'positive', baseAmount: 1, progressStep: 29, totalAmount: 465, createdAt: '2026-01-01' })
+    const p = projectAnnual(h, '2026-01-30')
+    expect(p.dayIndex).toBe(30)
+    // 剩余 336 天，起点 30 递增：30 + 31 + … + (30+335) = 336*(30 + 365)/2
+    const remaining = 365 - 30 + 1
+    const future = (remaining * (30 + (30 + remaining - 1))) / 2
+    expect(p.projectedAnnual).toBe(465 + future)
+    expect(p.achievedTotal).toBe(465)
+    expect(p.idealAnnual).toBe(66795) // 愿景恒定不受中途影响
+  })
+
+  it('漏卡回退：todayTarget 变小，projectedAnnual 下降（< 未漏卡场景）', () => {
+    // 全勤第 30 天：progressStep=29，今日目标 30
+    const onTrack = habit({ progressStep: 29, totalAmount: 465, createdAt: '2026-01-01' })
+    const pOnTrack = projectAnnual(onTrack, '2026-01-30')
+    // 漏 2 天归来：lastCheckinDate=01-27，gap=3 → missed=2 → step 29-2=27 → 今日目标 28
+    const backoff = habit({ progressStep: 29, totalAmount: 460, lastCheckinDate: '2026-01-27', createdAt: '2026-01-01' })
+    const pBackoff = projectAnnual(backoff, '2026-01-30')
+    expect(getDailyTarget(backoff, '2026-01-30')).toBe(28)
+    expect(pBackoff.todayTarget).toBe(28)
+    expect(pBackoff.projectedAnnual).toBeLessThan(pOnTrack.projectedAnnual)
+    // 泄漏回退后仍然巨大（愿景视角）：与 ideal 量级相仿
+    expect(pBackoff.projectedAnnual).toBeGreaterThan(60000)
+  })
+
+  it('dayIndex 边界：第 1 天 / 跨年仍正确', () => {
+    const d1 = projectAnnual(habit({ createdAt: '2026-01-01' }), '2026-01-01')
+    expect(d1.dayIndex).toBe(1)
+    const d300 = projectAnnual(habit({ createdAt: '2026-01-01' }), '2026-10-27')
+    expect(d300.dayIndex).toBe(300)
+  })
+
+  it('戒除（反向）习惯：用「省出」口径。ideal/projected 恒 0（不出现"做了 66795 个"的反语义）', () => {
+    const h = habit({ direction: 'negative', baseAmount: 5, progressStep: 3, totalAmount: 0, createdAt: '2026-01-01' })
+    const p = projectAnnual(h, '2026-01-13')
+    expect(p.idealAnnual).toBe(0)
+    expect(p.projectedAnnual).toBe(0)
+    expect(p.achievedTotal).toBe(0)
+    expect(p.todayTarget).toBe(getDailyTarget(h, '2026-01-13'))
+  })
+
+  it('已养成 / 超额历史不影响投影正确性（只读累计量）', () => {
+    const h = habit({ isFormed: true, formationDays: 21, totalAmount: 1000, progressStep: 10, createdAt: '2026-01-01' })
+    const p = projectAnnual(h, '2026-01-30')
+    expect(p.idealAnnual).toBe(66795) // 愿景不变
+    expect(p.achievedTotal).toBe(1000)
+    const remaining = 365 - 30 + 1
+    const future = (remaining * (getDailyTarget(h, '2026-01-30') + (getDailyTarget(h, '2026-01-30') + remaining - 1))) / 2
+    expect(p.projectedAnnual).toBe(1000 + future)
+  })
+
+  it('迁移：旧数据（createdAt 非合法业务日）不崩，dayIndex 兜底为 1', () => {
+    const h = habit({ createdAt: '' })
+    const p = projectAnnual(h, '2026-01-13')
+    expect(p.dayIndex).toBe(1)
+    expect(p.idealAnnual).toBe(66795)
+  })
+
+  it('锁死 cap：理想/预计都按恒定值计算', () => {
+    const h = lockCap(habit({ baseAmount: 1, createdAt: '2026-01-01' }), 10)
+    const p = projectAnnual(h, '2026-01-01')
+    expect(p.idealAnnual).toBe(10 * ANNUAL_PROJECTION_DAYS) // 每天 10，365 天
+    expect(p.todayTarget).toBe(10)
   })
 })
