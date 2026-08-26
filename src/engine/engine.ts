@@ -9,6 +9,7 @@
  * 规则来源：.scratch/earthol-hud/issues/01-habit-engine.md（11 条）
  */
 import type {
+  Achievement,
   CheckinInput,
   CheckinMode,
   CheckinResult,
@@ -522,4 +523,64 @@ export function projectAnnual(habit: HabitState, businessDate: string): AnnualPr
     dayIndex,
     todayTarget,
   }
+}
+
+/** 成就系统输入（R12）：从 EarthData 抽取成就判定所需的最小字段，保持引擎不依赖 storage */
+export interface AchievementInput {
+  /** 是否完成角色设定（profile.onboardedAt 非空） */
+  hasProfile: boolean
+  /** 全部习惯 */
+  habits: HabitState[]
+  /** 全部打卡记录数（真实发生过的事） */
+  checkinCount: number
+  /** 达成当天写入的业务日（YYYY-MM-DD） */
+  businessDate: string
+}
+
+/** 判定「戒除目标是否已触底 0」：反向习惯、已养成、当前目标为 0 */
+function isQuitAchieved(habit: HabitState, businessDate: string): boolean {
+  if (habit.direction !== 'negative') return false
+  if (!habit.isFormed) return false
+  return getDailyTarget(habit, businessDate) <= 0
+}
+
+/**
+ * 成就系统（R12 游戏化薄层，工单 19 P0）。
+ *
+ * 诚实原则：只基于真实发生过的事（profile/habits/checkins）判定，
+ * 绝不"假装成功"或用假数字激励（如"今日×365"）。所有成就 id 恒定，
+ * 达成后 earnedAt 写入业务日（YYYY-MM-DD），未达成 earnedAt=null + 暗示。
+ */
+export function computeAchievements(input: AchievementInput): Achievement[] {
+  const { hasProfile, habits, checkinCount, businessDate } = input
+
+  /** 全部习惯累计真实打卡成功次数 */
+  const totalActionCount = habits.reduce((sum, h) => sum + h.actionCount, 0)
+  /** 已养成（isFormed）的习惯数 */
+  const formedCount = habits.filter((h) => h.isFormed).length
+  /** 任一习惯连续 >= 7 天 */
+  const bestStreak = habits.reduce((best, h) => Math.max(best, h.streakDays), 0)
+  /** 是否任一戒除习惯已触底 0 */
+  const quitDone = habits.some((h) => isQuitAchieved(h, businessDate))
+
+  /** 定义一个成就；done 满足则达成，否则未达成给 hint */
+  const make = (
+    id: string,
+    title: string,
+    desc: string,
+    icon: string,
+    hint: string,
+    done: boolean,
+  ): Achievement => ({ id, title, desc, icon, earnedAt: done ? businessDate : null, hint })
+
+  return [
+    make('first-avatar', '初次化身', '完成角色设定，踏上身份蜕变之旅', '🌱', '完成角色设定后解锁', hasProfile),
+    make('first-action', '第一次行动', '迈出第一步——完成第一次打卡', '✅', '完成第一次打卡后解锁', checkinCount >= 1),
+    make('streak-7', '连续 7 天', '连续 7 天都稳稳地行动', '🔥', '连续 7 天达标后解锁', bestStreak >= 7),
+    make('formed', '习惯养成', '养成一个习惯——21 天窗口内达标 14 天', '💪', '让一个习惯的时间线达标 14 天后解锁', formedCount >= 1),
+    make('multi', '多线并进', '同时养成 2 个习惯', '⚔️', '同时养成 2 个习惯后解锁', formedCount >= 2),
+    make('quit', '戒除达人', '成功戒掉一个想做减法的事', '🚫', '把一个戒除习惯降到 0 后解锁', quitDone),
+    make('action-100', '百次行动', '累计完成 100 次打卡', '💯', '累计打卡 100 次后解锁', totalActionCount >= 100),
+    make('month-30', '坚持一月', '单习惯连续 30 天', '🏆', '一个习惯连续 30 天后解锁', bestStreak >= 30),
+  ]
 }

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { HabitState, RejectReason, WorkSchedule } from '../../engine/types'
-import { FORMED_DAYS, buildAutoNote, projectAnnual } from '../../engine/engine'
+import { FORMED_DAYS, buildAutoNote, computeAchievements, projectAnnual } from '../../engine/engine'
 import { earthStorage } from '../../storage/storage'
 import { parseData, serializeData } from '../../storage/storage'
 import { playChime, isSoundEnabled } from '../../util/playChime'
@@ -17,6 +17,7 @@ import { PetCard } from '../pet/PetCard'
 import { recordPetMood, settlePetMoodDecay } from '../pet/petFlow'
 import type { PetMoodEvent } from '../pet/petFlow'
 import { StoryPanel } from '../story/StoryPanel'
+import { AchievementPanel } from './AchievementPanel'
 import {
   DEFAULT_REMINDER_TIME,
   isValidReminderTime,
@@ -97,6 +98,8 @@ function HabitScreen() {
   const [editGoal, setEditGoal] = useState('')
   /** R10b-4：「我的故事」时间线开关 */
   const [storyOpen, setStoryOpen] = useState(false)
+  /** R12（工单 19）：打卡成功庆祝反馈（达标/储蓄养成/戒除完成），1 秒自动消退 */
+  const [celebration, setCelebration] = useState<{ text: string; kind: 'ok' | 'extra' | 'formed' } | null>(null)
 
   /** R10b-5：音效开关（settings.soundOn，默认开） */
   const [soundOn, setSoundOn] = useState(
@@ -106,6 +109,8 @@ function HabitScreen() {
   /** R6：schedule 最新值供定时器闭包读取（interval 只注册一次） */
   const scheduleRef = useRef(schedule)
   scheduleRef.current = schedule
+  /** R12（工单 19）：庆祝反馈消退定时器句柄 */
+  const celebrationTimer = useRef<number>(0)
 
   const [reminderEnabled, setReminderEnabled] = useState(
     () => earthStorage.getProfile()?.petReminderEnabled ?? false,
@@ -158,6 +163,10 @@ function HabitScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- interval 只注册一次，内部全走 storage 最新值
   }, [])
 
+  const profile = useMemo(
+    () => earthStorage.getProfile(),
+    [refresh], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   const habit = useMemo(
     () => earthStorage.listHabits()[0] ?? null,
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,6 +205,19 @@ function HabitScreen() {
   const businessDate = useMemo(
     () => (timeSource ? businessDateFromSource(timeSource, schedule) : null),
     [timeSource, schedule],
+  )
+  /** R12（工单 19）：成就系统——诚实基于真实数据判定（不造假） */
+  const achievements = useMemo(
+    () =>
+      businessDate
+        ? computeAchievements({
+            hasProfile: Boolean(profile?.onboardedAt),
+            habits,
+            checkinCount: checkins.length,
+            businessDate,
+          })
+        : [],
+    [profile, habits, checkins, businessDate],
   )
 
   /** R10b-4：每天打开主界面结算一次宠物连漏衰减（幂等；首次仅记录不衰减）；结算后刷新以显示新心情 */
@@ -300,6 +322,13 @@ function HabitScreen() {
     recordPetMood({ storage: earthStorage }, moodEvent)
     // R10b-5：打卡音效（超额/达标差异音高）
     playChime(result.warning ? 'extra' : 'achieved', isSoundEnabled(earthStorage.getSettings()))
+    // R12（工单 19）ACH-3：庆祝反馈——只在真实达成时给，1 秒自动消退
+    setCelebration({
+      text: result.warning ? '✨ 储蓄日' : result.formed ? '🎉 习惯养成' : '✓ 达标',
+      kind: result.warning ? 'extra' : result.formed ? 'formed' : 'ok',
+    })
+    window.clearTimeout(celebrationTimer.current)
+    celebrationTimer.current = window.setTimeout(() => setCelebration(null), 1000)
     // UX-1：按真实完成量分叉反馈（达标 / 未达标 / 超额），不虚假成功
     setFeedback({
       kind: result.warning ? 'warn' : 'ok',
@@ -841,6 +870,35 @@ function HabitScreen() {
           onChanged={bump}
           onClose={() => setStoryOpen(false)}
         />
+      )}
+
+      {/* R12（工单 19）：成就墙——诚实基于真实数据，默认折叠不打断 */}
+      {achievements.length > 0 && <AchievementPanel achievements={achievements} />}
+
+      {/* R12（工单 19）ACH-3：打卡庆祝反馈（达标/储蓄/养成），1 秒自动消退 */}
+      {celebration && (
+        <div
+          className="celebration-toast"
+          style={{
+            position: 'fixed',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 20,
+            padding: '8px 22px',
+            borderRadius: 999,
+            fontSize: 15,
+            fontWeight: 700,
+            pointerEvents: 'none',
+            color: celebration.kind === 'extra' ? '#d9b64a' : celebration.kind === 'formed' ? '#7c5cff' : '#7ee0a8',
+            background: 'rgba(20,20,40,0.92)',
+            border: `1px solid ${celebration.kind === 'extra' ? '#d9b64a' : celebration.kind === 'formed' ? '#7c5cff' : '#2c8a5a'}`,
+            boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+            animation: 'celebrationPop 1s ease-out forwards',
+          }}
+        >
+          {celebration.text}
+        </div>
       )}
     </main>
   )

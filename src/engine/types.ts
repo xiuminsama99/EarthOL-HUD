@@ -140,3 +140,19 @@ export interface CheckinResult {
   /** 本次是否因连续达标 STREAK_COIN_DAYS 天赠出休息券（P1-2：反馈提示用；0/1） */
   streakCoin?: number
 }
+
+/** 成就（R12 游戏化薄层） */
+export interface Achievement {
+  /** 稳定成就 id（恒等，防重复） */
+  id: string
+  /** 人话短标题，如「初次化身」 */
+  title: string
+  /** 一句话说明 */
+  desc: string
+  /** emoji 图标 */
+  icon: string
+  /** 达成日期（YYYY-MM-DD）；未达成为 null */
+  earnedAt: string | null
+  /** 未达成时的暗示 */
+  hint: string
+}

@@ -10,12 +10,14 @@ import {
   FORMATION_THRESHOLD,
   buildAutoNote,
   checkIn,
+  computeAchievements,
   getDailyTarget,
   lockCap,
   missedDays,
   projectAnnual,
   resolveBusinessDate,
 } from './engine'
+import type { AchievementInput } from './engine'
 import type { HabitState } from './types'
 
 /** 构造默认习惯状态（正向、基准 1、未锁死、从未打卡） */
@@ -782,5 +784,101 @@ describe('年度投影 projectAnnual（工单 13：一年之约）', () => {
     const p = projectAnnual(h, '2026-01-01')
     expect(p.idealAnnual).toBe(10 * ANNUAL_PROJECTION_DAYS) // 每天 10，365 天
     expect(p.todayTarget).toBe(10)
+  })
+})
+
+describe('成就系统（R12 工单 19 P0）', () => {
+  const BD = '2026-01-13'
+
+  function input(overrides: Partial<AchievementInput> = {}): AchievementInput {
+    return {
+      hasProfile: false,
+      habits: [],
+      checkinCount: 0,
+      businessDate: BD,
+      ...overrides,
+    }
+  }
+
+  function byId(list: ReturnType<typeof computeAchievements>, id: string) {
+    return list.find((a) => a.id === id)!
+  }
+
+  it('无任何数据：全部未达成（earnedAt=null，hint 给暗示），id 恒等', () => {
+    const list = computeAchievements(input())
+    expect(list).toHaveLength(8)
+    expect(list.every((a) => a.earnedAt === null)).toBe(true)
+    expect(byId(list, 'first-avatar').hint).toBe('完成角色设定后解锁')
+    expect(byId(list, 'first-action').earnedAt).toBeNull()
+  })
+
+  it('初次化身：已完成角色设定（hasProfile）即点亮', () => {
+    const list = computeAchievements(input({ hasProfile: true }))
+    expect(byId(list, 'first-avatar').earnedAt).toBe(BD)
+  })
+
+  it('第一次行动：有打卡记录（checkinCount>=1）即点亮', () => {
+    const list = computeAchievements(input({ checkinCount: 1 }))
+    expect(byId(list, 'first-action').earnedAt).toBe(BD)
+  })
+
+  it('连续 7 天：streakDays 边界（6 不成就、7 成就）', () => {
+    const six = computeAchievements(input({ habits: [habit({ streakDays: 6 })] }))
+    expect(byId(six, 'streak-7').earnedAt).toBeNull()
+    const seven = computeAchievements(input({ habits: [habit({ streakDays: 7 })] }))
+    expect(byId(seven, 'streak-7').earnedAt).toBe(BD)
+  })
+
+  it('习惯养成 & 多线并进：isFormed 个数判定', () => {
+    const one = computeAchievements(input({ habits: [habit({ isFormed: true })] }))
+    expect(byId(one, 'formed').earnedAt).toBe(BD)
+    expect(byId(one, 'multi').earnedAt).toBeNull()
+
+    const two = computeAchievements(input({
+      habits: [habit({ id: 'a', isFormed: true }), habit({ id: 'b', isFormed: true })],
+    }))
+    expect(byId(two, 'multi').earnedAt).toBe(BD)
+  })
+
+  it('戒除达人：反向 + 已养成 + 目标触底 0', () => {
+    // 反向、已养成、基准 10 且 progressStep 推进到目标 0
+    const formedQuit = habit({ direction: 'negative', baseAmount: 10, progressStep: 10, isFormed: true })
+    const list = computeAchievements(input({ habits: [formedQuit] }))
+    expect(byId(list, 'quit').earnedAt).toBe(BD)
+    // 反向但未养成：不该点亮
+    const notQuit = computeAchievements(input({ habits: [habit({ direction: 'negative', baseAmount: 10, progressStep: 10, isFormed: false })] }))
+    expect(byId(notQuit, 'quit').earnedAt).toBeNull()
+    // 正向已养成：戒除成就不该点亮
+    const positive = computeAchievements(input({ habits: [habit({ isFormed: true })] }))
+    expect(byId(positive, 'quit').earnedAt).toBeNull()
+  })
+
+  it('百次行动：actionCount 累计边界（99 不成就、100 成就）', () => {
+    const ninetyNine = computeAchievements(input({ habits: [habit({ actionCount: 99 })] }))
+    expect(byId(ninetyNine, 'action-100').earnedAt).toBeNull()
+    const hundred = computeAchievements(input({ habits: [habit({ actionCount: 100 })] }))
+    expect(byId(hundred, 'action-100').earnedAt).toBe(BD)
+  })
+
+  it('坚持一月：单习惯连续 30 天（29 不成就、30 成就）', () => {
+    const twentyNine = computeAchievements(input({ habits: [habit({ streakDays: 29 })] }))
+    expect(byId(twentyNine, 'month-30').earnedAt).toBeNull()
+    const thirty = computeAchievements(input({ habits: [habit({ streakDays: 30 })] }))
+    expect(byId(thirty, 'month-30').earnedAt).toBe(BD)
+  })
+
+  it('诚实：无打卡时 first-action 不点亮，无假数字（不出现今日×365 类字段）', () => {
+    const list = computeAchievements(input())
+    expect(byId(list, 'first-action').earnedAt).toBeNull()
+    // 所有成就 id 固定且互不重复
+    const ids = list.map((a) => a.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('多习惯合计 actionCount：两个习惯各 50 累计为 100', () => {
+    const list = computeAchievements(input({
+      habits: [habit({ id: 'a', actionCount: 50 }), habit({ id: 'b', actionCount: 50 })],
+    }))
+    expect(byId(list, 'action-100').earnedAt).toBe(BD)
   })
 })
