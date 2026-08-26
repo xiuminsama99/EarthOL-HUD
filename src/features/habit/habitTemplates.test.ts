@@ -37,10 +37,16 @@ describe('习惯模板库', () => {
 })
 
 describe('yearlyEffect 年度累计效果', () => {
-  it('养成方向：按目标量换算 365 天累计', () => {
-    expect(yearlyEffect(1, '个', 'positive')).toBe('365 天累计 365 个')
-    expect(yearlyEffect(5, '个', 'positive')).toBe('365 天累计 1825 个')
-    expect(yearlyEffect(100, '步', 'positive')).toBe('365 天累计 36500 步')
+  it('养成方向（未固定）：按每日 +1 等差规律算全年累计（R-4 诚实数字）', () => {
+    // sum = 365*1 + 364*365/2 = 365 + 66430 = 66795
+    expect(yearlyEffect(1, '个', 'positive')).toBe('以现在的节奏，一年后你会完成 66795 个')
+    expect(yearlyEffect(5, '个', 'positive')).toBe('以现在的节奏，一年后你会完成 68255 个')
+    expect(yearlyEffect(100, '步', 'positive')).toBe('以现在的节奏，一年后你会完成 102930 步')
+  })
+
+  it('养成方向（已固定）：每天恒定，全年 = 目标 × 365', () => {
+    expect(yearlyEffect(5, '个', 'positive', true)).toBe('365 天累计 1825 个')
+    expect(yearlyEffect(1, '个', 'positive', true)).toBe('365 天累计 365 个')
   })
 
   it('戒除方向：换「每天能省出」口径（UX-13：越戒越少，不能用累计）', () => {
@@ -48,19 +54,19 @@ describe('yearlyEffect 年度累计效果', () => {
     expect(yearlyEffect(30, '分钟', 'negative')).toBe('坚持一年，每天能省出 10950 分钟')
   })
 
-  it('方向缺省默认养成口径', () => {
-    expect(yearlyEffect(2, '个')).toBe('365 天累计 730 个')
+  it('方向缺省默认养成口径（未固定按等差）', () => {
+    expect(yearlyEffect(2, '个')).toBe('以现在的节奏，一年后你会完成 67160 个')
   })
 
   it('大数目标不溢出（上限 100 万基准场景）', () => {
-    expect(yearlyEffect(1_000_000, '元', 'positive')).toBe('365 天累计 365000000 元')
+    expect(yearlyEffect(1_000_000, '元', 'positive', true)).toBe('365 天累计 365000000 元')
   })
 
   it('非法输入兜底为 0，单位空串兜底为「次」', () => {
-    expect(yearlyEffect(0, '次', 'positive')).toBe('365 天累计 0 次')
-    expect(yearlyEffect(-1, '个', 'positive')).toBe('365 天累计 0 个')
-    expect(yearlyEffect(Number.NaN, '个', 'positive')).toBe('365 天累计 0 个')
-    expect(yearlyEffect(Number.POSITIVE_INFINITY, '个', 'positive')).toBe('365 天累计 0 个')
-    expect(yearlyEffect(5, '   ')).toBe('365 天累计 1825 次')
+    expect(yearlyEffect(0, '次', 'positive')).toBe('以现在的节奏，一年后你会完成 66430 次')
+    expect(yearlyEffect(-1, '个', 'positive', true)).toBe('365 天累计 0 个')
+    expect(yearlyEffect(Number.NaN, '个', 'positive', true)).toBe('365 天累计 0 个')
+    expect(yearlyEffect(Number.POSITIVE_INFINITY, '个', 'positive', true)).toBe('365 天累计 0 个')
+    expect(yearlyEffect(5, '   ', 'positive', true)).toBe('365 天累计 1825 次')
   })
 })

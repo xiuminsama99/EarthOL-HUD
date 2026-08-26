@@ -15,6 +15,15 @@ import type { CheckinRecord } from '../../storage/types'
 /** 向往基准：连续行动这么多天后，天平压向「真实的你」（可调产品常数） */
 export const DESIRE_BASELINE_DAYS = 7
 
+/** YYYY-MM-DD 加减 N 天（仅日历运算，纯字符串；用于最近 7 天窗口） */
+function businessDateDelta(date: string, delta: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + delta, 12))
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getUTCDate()).padStart(2, '0')
+  return `${dt.getUTCFullYear()}-${mm}-${dd}`
+}
+
 /** 全球 X% 模拟区间（示例数据，BaaS 接入后替换为真实统计） */
 export const GLOBAL_PERCENT_MIN = 30
 export const GLOBAL_PERCENT_MAX = 97
@@ -32,8 +41,10 @@ export interface ScaleData {
   actionCount: number
   /** 累计完成总量（全部习惯 totalAmount 之和，只涨不跌） */
   totalAmount: number
-  /** 目标达成率：达标打卡数 / 行动打卡数，百分比整数；从未行动为 null */
+  /** 目标达成率：达标打卡数 / 行动打卡数，百分比整数；从未行动为 null（保留字段，兼容旧读数） */
   achievedRate: number | null
+  /** 最近 7 天行动率：近 7 个业务日里行动过（非休息）的天数 / 7，百分比整数；无 today 或从未行动为 null */
+  weeklyActionRate: number | null
   /** 左盘「真实的你」重量 = 行动天数 */
   leftValue: number
   /** 右盘「向往的你」重量 = 向往基准（产品常数） */
@@ -53,8 +64,13 @@ export interface ScaleData {
  *
  * @param habits 全部习惯（总量合计用）
  * @param checkins 全部打卡记录（行动天数 / 达成率 / 最近打卡语来源）
+ * @param today 注入的业务日 YYYY-MM-DD（R-4：计算最近 7 天行动率；不传则不计算）
  */
-export function computeScaleData(habits: HabitState[], checkins: CheckinRecord[]): ScaleData {
+export function computeScaleData(
+  habits: HabitState[],
+  checkins: CheckinRecord[],
+  today: string | null = null,
+): ScaleData {
   const actions = checkins.filter((c) => !c.restDay)
   const actionDays = new Set(actions.map((c) => c.businessDate)).size
   const actionCount = actions.length
@@ -66,6 +82,18 @@ export function computeScaleData(habits: HabitState[], checkins: CheckinRecord[]
   const unit = unitSet.size === 1 ? [...unitSet][0] : '次'
   const achieved = actions.filter((c) => c.amount >= c.targetAmount).length
   const achievedRate = actionCount > 0 ? Math.round((achieved / actionCount) * 100) : null
+
+  // R-4：最近 7 天行动率 = 近 7 个业务日（含今天）行动过（非休息）的天数 / 7
+  let weeklyActionRate: number | null = null
+  if (today !== null) {
+    const actionDaySet = new Set(actions.map((c) => c.businessDate))
+    let acted = 0
+    for (let i = 0; i < 7; i++) {
+      const d = businessDateDelta(today, -i)
+      if (actionDaySet.has(d)) acted += 1
+    }
+    weeklyActionRate = Math.round((acted / 7) * 100)
+  }
 
   const leftValue = actionDays
   const rightValue = DESIRE_BASELINE_DAYS
@@ -93,6 +121,7 @@ export function computeScaleData(habits: HabitState[], checkins: CheckinRecord[]
     actionCount,
     totalAmount,
     achievedRate,
+    weeklyActionRate,
     leftValue,
     rightValue,
     tiltDeg,

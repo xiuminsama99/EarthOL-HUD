@@ -128,6 +128,7 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
     progressStep: 0,
     totalAmount: 0,
     consistencyDays: 0,
+    formationDateList: [],
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
@@ -140,7 +141,7 @@ export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult
 }
 
 /**
- * 超额反馈提示（A5 明确养成线中断 + B3 文案区分"存入的券"与"真实超额量"，UX-12 术语人话化）。
+ * 超额反馈提示（R-2：储蓄日——多做一点是储备，进度冻结不惩罚；B3 文案区分"存入的券"与"真实超额量"）。
  * 超额产生的休息券上限 = 当日目标量，因此超额量中只有部分转为休息券。
  */
 export function buildOverachievementNotice(
@@ -148,13 +149,13 @@ export function buildOverachievementNotice(
   coinsGained: number,
   vacationCoins: number,
 ): string {
-  return `超额 ${overAmount} 中 ${coinsGained} 已存为休息券（当前 ${vacationCoins} 张）——超额当天不计入养成进度`
+  return `储蓄日：超额 ${overAmount} 中 ${coinsGained} 已存为休息券（当前 ${vacationCoins} 张）——进度冻结一天，不丢失`
 }
 
 /**
- * 打卡结果反馈文案（UX-1：不虚假成功——按真实完成量分叉）。
- * - 超额：不建议 + 假期币（走 buildOverachievementNotice）
- * - 未达标：如实告知「做了 X / 目标 Y」（不计入养成线）
+ * 打卡结果反馈文案（R-1：不惩罚——未达标/超额均冻结进度而非清零）。
+ * - 超额：储蓄日 + 休息券（走 buildOverachievementNotice）
+ * - 未达标：如实告知「做了 X / 目标 Y」（进度冻结，不丢历史）
  * - 达标：庆祝
  */
 export function buildCheckinResultNotice(result: CheckinResult): string {
@@ -166,7 +167,7 @@ export function buildCheckinResultNotice(result: CheckinResult): string {
     )
   }
   if (result.completedAmount < result.targetAmount) {
-    return `做了 ${result.completedAmount} / 目标 ${result.targetAmount}，明天继续（未达标当天不计入养成进度）`
+    return `做了 ${result.completedAmount} / 目标 ${result.targetAmount}，明天继续（进度冻结，不丢历史）`
   }
   return '今日达标 ✓ 以新身份行动的一天'
 }

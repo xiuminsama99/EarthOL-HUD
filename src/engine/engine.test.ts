@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  FORMED_DAYS,
+  FORMATION_THRESHOLD,
   buildAutoNote,
   checkIn,
   getDailyTarget,
@@ -28,6 +28,7 @@ function habit(overrides: Partial<HabitState> = {}): HabitState {
     progressStep: 0,
     totalAmount: 0,
     consistencyDays: 0,
+    formationDateList: [],
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
@@ -128,7 +129,7 @@ describe('规则 5：超额 → 警告 + 超额量累计为假期币', () => {
     // B3：入币上限 = 当日目标量 → 超额 5 中只转 3 币
     expect(r.vacationCoinsDelta).toBe(3)
     expect(r.habit.vacationCoins).toBe(3)
-    expect(r.warning).toEqual({ kind: 'overachievement', message: '不建议，离目标更远' })
+    expect(r.warning).toEqual({ kind: 'overachievement', message: '储蓄日：多做一点，进度冻结不惩罚' })
     expect(r.habit.totalAmount).toBe(8)
     expect(r.habit.consistencyDays).toBe(0) // 突击不涨养成值
   })
@@ -178,54 +179,120 @@ describe('规则 6：假期币可抵扣休息日', () => {
 })
 
 describe('规则 7：总量与养成值分离', () => {
-  it('突击完成等差数列总和：总量计入、养成值不涨', () => {
-    const h = habit({ progressStep: 2, totalAmount: 20, consistencyDays: 5, formationDays: 5 }) // 目标 3
+  it('突击完成等差数列总和：总量计入、养成值不涨，窗口冻结（不清零）', () => {
+    // 窗口已有 2 个达标日（01-11、01-12），今日目标 3，突击做 100 → 未达标、窗口冻结、总量涨
+    const h = habit({ progressStep: 2, totalAmount: 20, consistencyDays: 5, formationDateList: ['2026-01-11', '2026-01-12'] }) // 目标 3
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 100, note: '一口气补上' })
     expect(r.habit.totalAmount).toBe(120) // 总量涨
     expect(r.habit.consistencyDays).toBe(5) // 养成值不涨
-    expect(r.habit.formationDays).toBe(0) // 突击日中断养成连续
+    expect(r.habit.formationDateList).toEqual(['2026-01-11', '2026-01-12']) // 冻结不清零
+    expect(r.habit.formationDays).toBe(2)
   })
 
-  it('每日持续执行：总量与养成值都涨', () => {
-    const h = habit({ progressStep: 2, totalAmount: 20, consistencyDays: 5, formationDays: 5 }) // 目标 3
+  it('每日达标：总量与养成值都涨，窗口追加达标日', () => {
+    const h = habit({ progressStep: 2, totalAmount: 20, consistencyDays: 5, formationDateList: ['2026-01-11', '2026-01-12'] }) // 目标 3
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 3, note: '今日达标' })
     expect(r.habit.totalAmount).toBe(23)
     expect(r.habit.consistencyDays).toBe(6)
-    expect(r.habit.formationDays).toBe(6)
+    expect(r.habit.formationDays).toBe(3)
+    expect(r.habit.formationDateList).toEqual(['2026-01-11', '2026-01-12', '2026-01-13'])
   })
 
-  it('不足完成：总量涨、养成值不涨', () => {
-    const h = habit({ progressStep: 2, consistencyDays: 5, formationDays: 5 }) // 目标 3
+  it('不足完成：总量涨、养成值不涨，窗口冻结', () => {
+    const h = habit({ progressStep: 2, consistencyDays: 5, formationDateList: ['2026-01-12'] }) // 目标 3
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 1, note: '只做了一点' })
     expect(r.habit.totalAmount).toBe(1)
     expect(r.habit.consistencyDays).toBe(5)
-    expect(r.habit.formationDays).toBe(0) // 未达标日中断
+    expect(r.habit.formationDateList).toEqual(['2026-01-12']) // 冻结不清零
+    expect(r.habit.formationDays).toBe(1)
   })
 })
 
-describe('规则 8：21 天养成线，中途中断重计', () => {
-  it(`连续 ${FORMED_DAYS} 天按等差数列执行 → 标记为已养成`, () => {
-    const h = habit({ progressStep: 20, formationDays: FORMED_DAYS - 1, consistencyDays: FORMED_DAYS - 1, lastCheckinDate: '2026-01-12' })
-    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '第 21 天' })
+describe('规则 8：21 天滑动窗口养成制（R-1：达标 ≥14 天养成，冻结不惩罚）', () => {
+  it(`窗口内达标满 ${FORMATION_THRESHOLD} 天 → 已养成`, () => {
+    const dates = ['2025-12-31', '2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', '2026-01-11', '2026-01-12']
+    const h = habit({ progressStep: 20, consistencyDays: dates.length, formationDateList: dates, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '第 14 天' })
     expect(r.status).toBe('checked-in')
-    expect(r.habit.formationDays).toBe(FORMED_DAYS)
+    expect(r.habit.formationDays).toBe(14)
     expect(r.habit.isFormed).toBe(true)
     expect(r.formed).toBe(true)
   })
 
-  it('缺勤中断：养成计数重新开始（与总量无关）', () => {
-    const h = habit({ progressStep: 10, formationDays: 10, consistencyDays: 10, totalAmount: 55, lastCheckinDate: '2026-01-10' })
-    // 2026-01-13 归来，缺勤 2 天
+  it('未达标日不清零已有窗口（冻结）', () => {
+    const h = habit({ progressStep: 10, formationDateList: ['2026-01-11', '2026-01-12'], consistencyDays: 2, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13') + 5, note: '今天多做点' })
+    expect(r.status).toBe('checked-in')
+    expect(r.habit.formationDays).toBe(2) // 冻结不清零
+    expect(r.habit.consistencyDays).toBe(2)
+  })
+
+  it('缺勤归来：窗口保留已有达标日，只追加今日达标（不清零）', () => {
+    const h = habit({ progressStep: 10, formationDateList: ['2026-01-10', '2026-01-11', '2026-01-12'], consistencyDays: 10, totalAmount: 55, lastCheckinDate: '2026-01-10' })
+    // 2026-01-13 归来，缺勤 2 天（01-11、01-12 本应打卡但缺勤）
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '我回来了' })
-    expect(r.habit.formationDays).toBe(1) // 重计为第 1 天
+    expect(r.habit.formationDays).toBe(4) // 保留 3 个 + 今日达标 = 4
     expect(r.habit.consistencyDays).toBe(11) // 累计一致性不受中断影响
     expect(r.habit.totalAmount).toBe(55 + getDailyTarget(h, '2026-01-13'))
   })
 
-  it('缺勤期间养成值清零，未达标日也不推进', () => {
-    const h = habit({ formationDays: 7, lastCheckinDate: '2026-01-10' })
+  it('缺勤只清窗口外的旧达标日（窗口自然滑动）', () => {
+    // 达标日 01-01（距今日 12 天）仍在窗口内；造一个更老的 12-20（距今日 24 天）被窗口剔除
+    const h = habit({ formationDateList: ['2025-12-20'], lastCheckinDate: '2026-01-10' })
     const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: 0, note: '今天完全没做' })
+    expect(r.habit.formationDateList).toEqual([]) // 老达标日被窗口剔除
     expect(r.habit.formationDays).toBe(0)
+  })
+
+  it('养成后不被单个未达标/超额日撤销（isFormed 保持）', () => {
+    // 13 个达标日（含 01-12） + 今日 01-13 达标 = 14 → 养成；随后未达标一天仍保持已养成
+    const dates = ['2025-12-31', '2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', '2026-01-11', '2026-01-12']
+    const formed = checkIn({ habit: habit({ progressStep: 20, formationDateList: dates, lastCheckinDate: '2026-01-12' }), now: NOW, schedule: 'day', amount: getDailyTarget(habit({ progressStep: 20, formationDateList: dates, lastCheckinDate: '2026-01-12' }), '2026-01-13'), note: '养成' })
+    expect(formed.habit.isFormed).toBe(true)
+    // 次日未达标（做 1 < 目标 22）
+    const next = checkIn({ habit: formed.habit, now: new Date(2026, 0, 14, 10, 0), schedule: 'day', amount: 1, note: '状态差' })
+    expect(next.status).toBe('checked-in')
+    expect(next.habit.isFormed).toBe(true) // 已养成保持
+    expect(next.habit.formationDays).toBe(14) // 冻结，不清零（窗口内仍有 14 个达标日）
+  })
+})
+
+describe('R-2：连续达标 7 天赠 1 张休息券', () => {
+  it('连续达标第 7 天 → +1 券（达成日当天发放）', () => {
+    const dates = ['2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', '2026-01-11', '2026-01-12']
+    const h = habit({ progressStep: 6, formationDateList: dates, lastCheckinDate: '2026-01-12' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '第 7 天' })
+    expect(r.status).toBe('checked-in')
+    expect(r.vacationCoinsDelta).toBe(0) // 达标日无超额币
+    expect(r.habit.vacationCoins).toBe(1) // 连续 7 天赠 1 券
+    expect(r.habit.formationDays).toBe(7)
+  })
+
+  it('未满 7 天不赠券（连续断档则重计）', () => {
+    const h = habit({ progressStep: 3, formationDateList: ['2026-01-10', '2026-01-11'], lastCheckinDate: '2026-01-11' })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '断档后归来' })
+    expect(r.status).toBe('checked-in')
+    expect(r.vacationCoinsDelta).toBe(0)
+    expect(r.habit.vacationCoins).toBe(0)
+  })
+})
+
+describe('R-3：戒除习惯触底 0 直接养成', () => {
+  it('反向习惯目标推进到 0 当天 → 已养成 ✓ ', () => {
+    const h = habit({ direction: 'negative', baseAmount: 6, progressStep: 5 }) // 目标 1；打完此次推至 0
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '最后一减' })
+    expect(r.status).toBe('checked-in')
+    // 目标 = base - step = 6 - (5+1) = 0
+    expect(r.habit.progressStep).toBe(6)
+    expect(r.habit.isFormed).toBe(true)
+    expect(r.formed).toBe(true)
+  })
+
+  it('未触底（目标仍 > 0）不养成', () => {
+    const h = habit({ direction: 'negative', baseAmount: 10, progressStep: 2 })
+    const r = checkIn({ habit: h, now: NOW, schedule: 'day', amount: getDailyTarget(h, '2026-01-13'), note: '持续减少' })
+    expect(r.status).toBe('checked-in')
+    expect(r.habit.isFormed).toBe(false)
   })
 })
 
@@ -532,9 +599,9 @@ describe('R4：最低版本（minimal mode）', () => {
     expect(dup.reason).toBe('already-checked-in')
   })
 
-  it('次日恢复达标：养成线从保持的位置继续推进（不丢进度）', () => {
+  it('次日恢复达标：养成窗口从保持的位置继续推进（不丢进度）', () => {
     const minimal = checkIn({
-      habit: habit({ progressStep: 5, formationDays: 9, lastCheckinDate: '2026-01-12' }),
+      habit: habit({ progressStep: 5, formationDateList: ['2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-10', '2026-01-11'], lastCheckinDate: '2026-01-12' }),
       now: NOW,
       schedule: 'day',
       amount: 1,
@@ -548,7 +615,7 @@ describe('R4：最低版本（minimal mode）', () => {
       amount: 6,
     })
     expect(next.status).toBe('checked-in')
-    expect(next.habit.formationDays).toBe(10) // 从保持的 9 继续 +1
+    expect(next.habit.formationDays).toBe(10) // minimal 不动窗口，次日达标追加 1 个新日（01-03..01-11 共 9 个 + 01-14）
   })
 
   it('restDay 优先：restDay=true 且 mode=minimal 时走休息分支（不记行动日）', () => {

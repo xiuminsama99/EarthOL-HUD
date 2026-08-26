@@ -27,6 +27,7 @@ function makeHabit(partial: Partial<HabitState> = {}): HabitState {
     progressStep: 3,
     totalAmount: 0,
     consistencyDays: 0,
+    formationDateList: [],
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
@@ -206,3 +207,30 @@ describe('最近打卡语', () => {
     expect(scale.latestNote).toBe('最新的记录')
   })
 })
+
+describe('R-4：最近 7 天行动率', () => {
+  it('近 7 天（含今天）行动天数 / 7；不传 today 为 null', () => {
+    const checkins = [
+      makeCheckin({ businessDate: '2026-01-07' }),
+      makeCheckin({ id: 'c2', businessDate: '2026-01-08' }),
+      makeCheckin({ id: 'c3', businessDate: '2026-01-09' }),
+      makeCheckin({ id: 'c4', businessDate: '2026-01-10' }),
+      makeCheckin({ id: 'c5', businessDate: '2026-01-11' }),
+      makeCheckin({ id: 'c6', businessDate: '2026-01-12' }),
+    ]
+    // today=01-13：近 7 天 = 01-07..01-13，6 天有行动 → 86%
+    expect(computeScaleData([], checkins, '2026-01-13').weeklyActionRate).toBe(86)
+    // 不传 today → null
+    expect(computeScaleData([], checkins).weeklyActionRate).toBeNull()
+  })
+
+  it('今天未行动也计入分母（含漏卡）', () => {
+    const checkins = [
+      makeCheckin({ businessDate: '2026-01-10' }),
+      makeCheckin({ id: 'c2', businessDate: '2026-01-11' }),
+    ]
+    // today=01-13：近 7 天 = 01-07..01-13；01-10、01-11 行动 → 2/7 = 29%
+    expect(computeScaleData([], checkins, '2026-01-13').weeklyActionRate).toBe(29)
+  })
+})
+

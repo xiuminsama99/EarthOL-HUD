@@ -89,22 +89,35 @@ export const HABIT_TEMPLATES: readonly HabitTemplate[] = [
 ]
 
 /**
- * 年度累计效果文案：按「当前目标量」换算 365 天累计（UX-13 按方向换说法）。
+ * 年度累计效果文案（R-4：诚实数字）。
+ *
+ * - 养成（positive）：未固定 → 按每日 +1 的等差规律算全年累计（sum = 365*target + 364*365/2）；
+ *   已固定 → 每天恒定，全年 = target*365。
+ * - 戒除（negative）：换「每天能省出」口径（越戒越少，不能用累计）。
  *
  * @param target 当日目标量（锁死后 = cap；未锁死 = 今日目标）
  * @param unit 计量单位（习惯字段 unit）
- * @param direction 习惯方向：戒除（negative）用「每天能省出」口径，养成保持「365 天累计」
- * @returns 如「365 天累计 365 个」/「坚持一年，每天能省出 1825 分钟」
+ * @param direction 习惯方向
+ * @param locked 是否已固定（cap 非 null）。未固定养成按等差累计，固定后按恒定全年
+ * @returns 如「以现在的节奏，一年后你会完成 66795 个」/「365 天累计 3650 个」/「坚持一年，每天能省出 1825 分钟」
  */
 export function yearlyEffect(
   target: number,
   unit: string,
   direction: HabitDirection = 'positive',
+  locked = false,
 ): string {
   const safeTarget = Number.isFinite(target) && target > 0 ? Math.floor(target) : 0
   const u = unit.trim() === '' ? '次' : unit.trim()
+  if (direction === 'negative') {
+    const total = safeTarget * 365
+    return `坚持一年，每天能省出 ${total} ${u}`
+  }
+  if (!locked) {
+    // 等差和：第 1 天 target，每天 +1，共 365 天
+    const sum = safeTarget * 365 + (364 * 365) / 2
+    return `以现在的节奏，一年后你会完成 ${sum} ${u}`
+  }
   const total = safeTarget * 365
-  return direction === 'negative'
-    ? `坚持一年，每天能省出 ${total} ${u}`
-    : `365 天累计 ${total} ${u}`
+  return `365 天累计 ${total} ${u}`
 }

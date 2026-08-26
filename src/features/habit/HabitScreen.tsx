@@ -177,15 +177,19 @@ function HabitScreen() {
     () => earthStorage.listCheckins(),
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const scale = useMemo(() => computeScaleData(habits, checkins), [habits, checkins])
+  const businessDate = useMemo(
+    () => (timeSource ? businessDateFromSource(timeSource, schedule) : null),
+    [timeSource, schedule],
+  )
+  /** R-4：最近 7 天行动率基于注入的业务日计算 */
+  const scale = useMemo(
+    () => computeScaleData(habits, checkins, businessDate),
+    [habits, checkins, businessDate],
+  )
   /** 自动生成打卡语（预览用）：默认展示，用户可确认或编辑覆盖 */
   const autoNote = useMemo(
     () => (habit ? buildAutoNote(habit, identity) : ''),
     [habit, identity],
-  )
-  const businessDate = useMemo(
-    () => (timeSource ? businessDateFromSource(timeSource, schedule) : null),
-    [timeSource, schedule],
   )
   const plan = useMemo(
     () => (habit && businessDate ? planToday(habit, businessDate) : null),
@@ -656,7 +660,7 @@ function HabitPanel(props: HabitPanelProps) {
         </span>
       </div>
       <p style={{ color: '#8b8ba3', fontSize: 12, marginTop: 0 }}>
-        总量 {habit.totalAmount} · 稳定天数 {habit.consistencyDays} 天 · 休息券 {habit.vacationCoins} 张
+        总量 {habit.totalAmount} · 达标次数 {habit.consistencyDays} 天 · 休息券 {habit.vacationCoins} 张
         {habit.isFormed && <span style={{ color: '#7c5cff' }}> · 已养成 ✓</span>}
       </p>
 
@@ -691,13 +695,14 @@ function HabitPanel(props: HabitPanelProps) {
         )}
       </div>
 
-      {/* UX-3：养成进度（不做 streak 叙事，与产品哲学一致）；缺勤归来如实解释重置 */}
+      {/* R-1：窗口制养成进度（不惩罚：缺勤/超额冻结，不归零）；缺勤归来如实解释 */}
       <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 6 }}>
-        养成进度 {habit.formationDays}/{FORMED_DAYS}
+        21 天里已达标 {habit.formationDays}/{FORMED_DAYS} 天
+        {!habit.isFormed && '（满 14 天即养成）'}
       </div>
       {plan.backoffDays > 0 && (
         <div style={{ fontSize: 12, color: '#d9b64a', marginBottom: 6 }}>
-          缺勤会重置养成进度，从第 1 天重新计——没关系，继续就是
+          缺勤会影响目标回退，但已达标的天数都保留——没关系，继续就是
         </div>
       )}
 
@@ -710,7 +715,7 @@ function HabitPanel(props: HabitPanelProps) {
           fontWeight: 600,
         }}
       >
-        {zeroTarget ? '已达成 🎉' : `${yearlyEffect(plan.target, habit.unit, habit.direction)}，坚持就会抵达`}
+        {zeroTarget ? '已达成 🎉' : `${yearlyEffect(plan.target, habit.unit, habit.direction, plan.locked)}，坚持就会抵达`}
       </p>
 
       {props.feedback && (
@@ -774,7 +779,7 @@ function HabitPanel(props: HabitPanelProps) {
                   cursor: done ? 'default' : 'pointer',
                 }}
               >
-                {extra === 0 ? '刚好达标' : `多做了 ${extra} 个（不建议）`}
+                {extra === 0 ? '刚好达标' : `多做了 ${extra}（储蓄）`}
               </button>
             ))}
           </div>

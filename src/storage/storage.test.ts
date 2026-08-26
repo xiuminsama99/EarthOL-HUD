@@ -32,6 +32,7 @@ function makeHabit(over: Partial<HabitState> = {}): HabitState {
     progressStep: 0,
     totalAmount: 0,
     consistencyDays: 0,
+    formationDateList: [],
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,

@@ -530,12 +530,12 @@ describe('锁死 / 可调上限（动态调节条）', () => {
   })
 })
 
-describe('超额提示文案（habitFlow 层统一构建，UX-6 简化 / UX-12 人话化）', () => {
-  it('保留「超额 X 中 Y 已存为休息券」区分与「不计入养成进度」，去掉技术腔', () => {
+describe('超额提示文案（habitFlow 层统一构建，R-2：储蓄日，进度冻结不惩罚）', () => {
+  it('保留「超额 X 中 Y 已存为休息券」区分，改「进度冻结」口径', () => {
     // 超额 5、其中 3 转为休息券、当前共 3 张（B3 口径：入券上限=当日目标量）
     const notice = buildOverachievementNotice(5, 3, 3)
-    expect(notice).toContain('超额 5 中 3 已存为休息券（当前 3 张）')
-    expect(notice).toContain('不计入养成进度')
+    expect(notice).toContain('储蓄日：超额 5 中 3 已存为休息券（当前 3 张）')
+    expect(notice).toContain('进度冻结一天，不丢失')
     expect(notice).not.toContain('不建议') // 技术警告不再出现在用户可见文案
     expect(notice).not.toContain('重新计数') // 技术表述移除
   })
@@ -552,6 +552,7 @@ describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
     progressStep: 0,
     totalAmount: 0,
     consistencyDays: 0,
+    formationDateList: [],
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,
@@ -578,25 +579,25 @@ describe('UX-1：打卡结果反馈文案（不虚假成功）', () => {
     expect(buildCheckinResultNotice(result({}))).toBe('今日达标 ✓ 以新身份行动的一天')
   })
 
-  it('未达标：如实告知「做了 X / 目标 Y」并说明不计入养成进度', () => {
+  it('未达标：如实告知「做了 X / 目标 Y」并说明进度冻结', () => {
     expect(buildCheckinResultNotice(result({ completedAmount: 3 }))).toBe(
-      '做了 3 / 目标 5，明天继续（未达标当天不计入养成进度）',
+      '做了 3 / 目标 5，明天继续（进度冻结，不丢历史）',
     )
   })
 
-  it('超额：走超额提示（含休息券与养成进度口径）', () => {
+  it('超额：走超额提示（含休息券与进度冻结口径）', () => {
     const notice = buildCheckinResultNotice(
       result({
         completedAmount: 8,
         targetAmount: 5,
         overAmount: 3,
         vacationCoinsDelta: 1,
-        warning: { kind: 'overachievement', message: '不建议，离目标更远' },
+        warning: { kind: 'overachievement', message: '储蓄日：多做一点，进度冻结不惩罚' },
         habit: { ...baseHabit, vacationCoins: 1 },
       }),
     )
-    expect(notice).toContain('超额 3 中 1 已存为休息券（当前 1 张）')
-    expect(notice).toContain('不计入养成进度')
+    expect(notice).toContain('储蓄日：超额 3 中 1 已存为休息券（当前 1 张）')
+    expect(notice).toContain('进度冻结一天，不丢失')
   })
 })
 
@@ -611,6 +612,7 @@ describe('UX-7：戒除类习惯触底 0 判定（完成态）', () => {
     progressStep: 3,
     totalAmount: 0,
     consistencyDays: 0,
+    formationDateList: [],
     formationDays: 0,
     isFormed: false,
     vacationCoins: 0,

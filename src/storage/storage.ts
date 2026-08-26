@@ -106,6 +106,8 @@ function normalizeHabit(h: unknown): HabitState {
     progressStep: typeof x.progressStep === 'number' ? x.progressStep : 0,
     totalAmount: typeof x.totalAmount === 'number' ? x.totalAmount : 0,
     consistencyDays: typeof x.consistencyDays === 'number' ? x.consistencyDays : 0,
+    /** R-1 窗口制养成：旧数据无 formationDateList → 空数组（窗口从打卡起重新计；isFormed 保留） */
+    formationDateList: Array.isArray(x.formationDateList) ? x.formationDateList : [],
     formationDays: typeof x.formationDays === 'number' ? x.formationDays : 0,
     isFormed: x.isFormed === true,
     vacationCoins: typeof x.vacationCoins === 'number' ? x.vacationCoins : 0,

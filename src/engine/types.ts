@@ -44,11 +44,17 @@ export interface HabitState {
   progressStep: number
   /** 总量：累计完成量之和，只涨不跌（突击完成也计入） */
   totalAmount: number
-  /** 养成值：达标日（完成量 === 当日目标量）累计天数；突击/不足不涨 */
+  /** 养成值：达标日（完成量 === 当日目标量）累计天数；突击/不足不涨（只增不涨） */
   consistencyDays: number
-  /** 当前连续达标计数：中断（缺勤/未达标）归零，达 21 天养成 */
+  /**
+   * 达标日业务日列表（YYYY-MM-DD）：21 天滑动窗口养成制数据源。
+   * 达标日（amount === target）追加，未达标/超额日冻结（不加不清零）。
+   * 旧数据（无此字段）由 storage.normalizeHabit 补空数组。
+   */
+  formationDateList: string[]
+  /** 当前 21 天窗口内达标天数（由 formationDateList 在打卡时派生） */
   formationDays: number
-  /** 是否已养成（formationDays >= 21） */
+  /** 是否已养成：窗口内达标天数 >= 14；养成后保持（不再被单日撤销） */
   isFormed: boolean
   /** 假期币余额：超额量累计而来，可抵扣休息日 */
   vacationCoins: number

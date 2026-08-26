@@ -128,9 +128,9 @@ export function ScalePanel({ scale, petBreed, petName, identity, vision }: Scale
         </div>
         <div style={statBox}>
           <div style={{ fontSize: 20, fontWeight: 700 }}>
-            {scale.achievedRate === null ? '—' : `${scale.achievedRate}%`}
+            {scale.weeklyActionRate === null ? '—' : `${scale.weeklyActionRate}%`}
           </div>
-          <div style={{ fontSize: 11, color: '#8b8ba3' }}>目标达成率</div>
+          <div style={{ fontSize: 11, color: '#8b8ba3' }}>最近 7 天行动率</div>
         </div>
       </div>
 

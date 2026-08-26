@@ -17,8 +17,17 @@ import type {
   WorkSchedule,
 } from './types'
 
-/** 养成所需连续达标天数 */
-export const FORMED_DAYS = 21
+/** 养成窗口天数（21 天滑动窗口养成制） */
+export const FORMATION_WINDOW_DAYS = 21
+
+/** 展示用分母别名（历史字段名，保留给 UI/测试：养成进度 X/21） */
+export const FORMED_DAYS = FORMATION_WINDOW_DAYS
+
+/** 养成所需窗口内达标天数（>= 14 即养成） */
+export const FORMATION_THRESHOLD = 14
+
+/** 连续达标 7 天赠 1 张休息券 */
+export const STREAK_COIN_DAYS = 7
 
 /**
  * 夜间工作者的业务日边界小时：凌晨 0:00-4:59 的操作归属昨日，
@@ -28,8 +37,8 @@ export const NIGHT_DAY_START_HOUR = 5
 
 const DAY_MS = 86_400_000
 
-/** 超额警告文案（产品口径：不建议，离目标更远） */
-const OVERACHIEVEMENT_MESSAGE = '不建议，离目标更远'
+/** 超额文案（R-2：超额改名「储备」——多做一点不是违规，进度冻结不惩罚） */
+const OVERACHIEVEMENT_MESSAGE = '储蓄日：多做一点，进度冻结不惩罚'
 
 /** 两个 YYYY-MM-DD 业务日之间的日历日差（b - a） */
 function daysBetween(a: string, b: string): number {
@@ -93,6 +102,26 @@ export function missedDays(habit: HabitState, businessDate: string): number {
   if (habit.lastCheckinDate === null) return 0
   const gap = daysBetween(habit.lastCheckinDate, businessDate)
   return Math.max(0, gap - 1)
+}
+
+/** 达标日窗口过滤：只保留 businessDate 前 FORMATION_WINDOW_DAYS 天内（含当日）的达标日 */
+function pruneFormationDates(dates: string[], businessDate: string): string[] {
+  return dates.filter((d) => {
+    const gap = daysBetween(d, businessDate)
+    return gap >= 0 && gap < FORMATION_WINDOW_DAYS
+  })
+}
+
+/** 截至 businessDate 的连续达标天数（按业务日往前数；中断即停） */
+function achievedStreak(dates: string[], businessDate: string): number {
+  const set = new Set(dates)
+  let streak = 0
+  let cursor = businessDate
+  while (set.has(cursor)) {
+    streak += 1
+    cursor = dayKeyWithDelta(cursor, -1, BUSINESS_TIME_ZONE)
+  }
+  return streak
 }
 
 /**
@@ -262,8 +291,6 @@ export function checkIn(input: CheckinInput): CheckinResult {
     }
   }
 
-  const missed = missedDays(habit, businessDate)
-
   // ---- 状态推进 ----
   let progressStep = habit.progressStep
   if (habit.cap === null) progressStep += 1
@@ -273,23 +300,46 @@ export function checkIn(input: CheckinInput): CheckinResult {
   // B3：超额产生假期币上限 = 当日目标量（超额量"存储"为休息额度，防故意刷币）；
   // 超额警告仍显示真实超额量
   const vacationCoinsGain = Math.min(overAmount, targetAmount)
-  const vacationCoins = habit.vacationCoins + vacationCoinsGain
 
   // 真实打卡成功次数（锁死 / 缺勤回退不影响；打卡语「第 N 次」用它）
   const actionCount = habit.actionCount + 1
 
-  // 达标日（完成量 === 目标量）：养成值与连续计数都推进；否则养成连续中断
+  // 达标日（完成量 === 目标量）：养成值与窗口都推进；否则冻结（不加不清零，R-1）
   const achieved = amount === targetAmount
   const consistencyDays = achieved ? habit.consistencyDays + 1 : habit.consistencyDays
-  const formationDays = achieved ? (missed > 0 ? 1 : habit.formationDays + 1) : 0
 
-  const isFormed = formationDays >= FORMED_DAYS
+  // ---- R-1 窗口制养成（冻结不惩罚）----
+  // 达标日追加到窗口，未达标/超额日冻结（不加也不清零），窗口按业务日自然滑动
+  let formationDateList = habit.formationDateList ?? []
+  if (achieved) {
+    if (!formationDateList.includes(businessDate)) {
+      formationDateList = [...formationDateList, businessDate]
+    }
+  }
+  formationDateList = pruneFormationDates(formationDateList, businessDate)
+  const formationDays = formationDateList.length
+
+  // R-3：戒除习惯目标触底 0 ＝ 完成戒除 ＝ 直接已养成。
+  // 以推进后的 progressStep 判定「下一次目标是否已到 0」；今日目标已为 0 亦视为完成。
+  const nextStep = habit.cap === null ? progressStep : habit.progressStep
+  const nextTargetNegative =
+    habit.direction === 'negative' ? Math.max(0, habit.baseAmount - nextStep) : -1
+  const quitCompleted = habit.direction === 'negative' && (targetAmount === 0 || nextTargetNegative === 0)
+
+  // 已养成后不被单日撤销（isFormed 一旦为真即保持）；达到窗口阈值养成；戒除触底亦养成
+  const isFormed = habit.isFormed || formationDays >= FORMATION_THRESHOLD || quitCompleted
+
+  // R-2：连续达标 STREAK_COIN_DAYS 天赠 1 张休息券（达标日当天发放）
+  const streak = achieved ? achievedStreak(formationDateList, businessDate) : 0
+  const streakCoin = streak > 0 && streak % STREAK_COIN_DAYS === 0 ? 1 : 0
+  const vacationCoins = habit.vacationCoins + vacationCoinsGain + streakCoin
 
   const nextHabit: HabitState = {
     ...habit,
     progressStep,
     totalAmount,
     consistencyDays,
+    formationDateList,
     formationDays,
     isFormed,
     vacationCoins,
