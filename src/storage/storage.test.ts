@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   CURRENT_VERSION,
+  DEFAULT_SETTINGS,
   EarthStorage,
   STORAGE_KEY,
   emptyData,
   migrations,
+  parseData,
+  serializeData,
 } from './storage'
 import type { HabitState } from '../engine/types'
 
@@ -542,5 +545,120 @@ describe('EarthStorage 数据层', () => {
       }),
     )
     expect(new EarthStorage(backend).getProfile()?.petReminderTime).toBe('20:00')
+  })
+
+  it('R10b-5：空数据默认音效开（DEFAULT_SETTINGS）', () => {
+    expect(emptyData().settings).toEqual(DEFAULT_SETTINGS)
+    expect(emptyData().settings.soundOn).toBe(true)
+  })
+
+  it('R10b-5：旧数据缺 settings 时读回默认（音效开，旧 localStorage 可用）', () => {
+    const { backend, store } = makeBackend()
+    store.set(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        data: {
+          profile: null,
+          habits: [],
+          checkins: [],
+          pets: [],
+          assets: [],
+          savingsAccounts: [],
+          bills: [],
+        },
+      }),
+    )
+    expect(new EarthStorage(backend).getSettings()).toEqual({ soundOn: true })
+  })
+
+  it('R10b-5：updateSettings 打补丁且读取一致', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    s.updateSettings({ soundOn: false })
+    expect(s.getSettings()).toEqual({ soundOn: false })
+    // 只补丁 soundOn，其余默认保持
+    s.updateSettings({})
+    expect(s.getSettings()).toEqual({ soundOn: false })
+  })
+
+  it('R10b-5：serializeData → parseData roundtrip（含全部字段与设置的改动）', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    s.updateProfile({ identityStatement: '我是健康的人' })
+    s.upsertHabit(makeHabit({ id: 'h1', name: '俯卧撑' }))
+    s.addCheckin({
+      id: 'c1',
+      habitId: 'h1',
+      businessDate: '2026-08-25',
+      amount: 1,
+      targetAmount: 1,
+      note: '今天以健康的人的身份行动了',
+      restDay: false,
+      mode: 'normal',
+      createdAt: '2026-08-25T00:00:00Z',
+    })
+    s.updateSettings({ soundOn: false })
+
+    const json = serializeData(s.read())
+    const parsed = parseData(json)
+    expect(parsed.error).toBeNull()
+    expect(parsed.data).not.toBeNull()
+    expect(parsed.data?.profile?.identityStatement).toBe('我是健康的人')
+    expect(parsed.data?.habits).toHaveLength(1)
+    expect(parsed.data?.habits[0]?.name).toBe('俯卧撑')
+    expect(parsed.data?.checkins).toHaveLength(1)
+    expect(parsed.data?.settings).toEqual({ soundOn: false })
+  })
+
+  it('R10b-5：parseData 拒绝损坏 JSON', () => {
+    expect(parseData('{oops')).toEqual({ data: null, error: 'invalid-json' })
+  })
+
+  it('R10b-5：parseData 拒绝版本不匹配（跨版本导入丢弃）', () => {
+    const older = JSON.stringify({ version: 1, data: { profile: null, habits: [], checkins: [], pets: [], assets: [], savingsAccounts: [], bills: [] } })
+    expect(parseData(older)).toEqual({ data: null, error: 'wrong-version' })
+    const newer = JSON.stringify({ version: 99, data: { profile: null, habits: [], checkins: [], pets: [], assets: [], savingsAccounts: [], bills: [], settings: { soundOn: true } } })
+    expect(parseData(newer)).toEqual({ data: null, error: 'wrong-version' })
+    const noVersion = JSON.stringify({ data: { profile: null, habits: [] } })
+    expect(parseData(noVersion)).toEqual({ data: null, error: 'wrong-version' })
+  })
+
+  it('R10b-5：parseData 拒绝结构非法（habits 非数组）', () => {
+    const bad = JSON.stringify({ version: CURRENT_VERSION, data: { profile: null, habits: 'nope', checkins: [], pets: [], assets: [], savingsAccounts: [], bills: [], settings: { soundOn: true } } })
+    expect(parseData(bad)).toEqual({ data: null, error: 'invalid-structure' })
+  })
+
+  it('R10b-5：replaceAll 整体替换数据（导入落地）', () => {
+    const { backend } = makeBackend()
+    const s = new EarthStorage(backend)
+    s.updateProfile({ identityStatement: '旧身份' })
+    const incoming = {
+      ...emptyData(),
+      profile: {
+        id: 'p2',
+        identityStatement: '新身份',
+        vision: null,
+        antivision: null,
+        badHabitDesc: null,
+        annualGoal: null,
+        auditScores: null,
+        personaName: null,
+        schedule: 'day' as const,
+        lastScheduleSwitchAt: null,
+        petReminderEnabled: false,
+        petReminderTime: '20:00',
+        lastPetReminderDate: null,
+        onboardedAt: null,
+        createdAt: '2026-08-25T00:00:00Z',
+      },
+      habits: [makeHabit({ id: 'h9', name: '喝够水' })],
+      settings: { soundOn: false },
+    }
+    s.replaceAll(incoming)
+    expect(s.getProfile()?.identityStatement).toBe('新身份')
+    expect(s.listHabits()).toHaveLength(1)
+    expect(s.listHabits()[0]?.name).toBe('喝够水')
+    expect(s.getSettings()).toEqual({ soundOn: false })
   })
 })

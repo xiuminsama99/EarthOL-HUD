@@ -116,6 +116,12 @@ export interface Bill {
   createdAt: string
 }
 
+/** 应用级设置（R10b-5：音效开关等，UI 偏好持久化） */
+export interface AppSettings {
+  /** 打卡音效（默认开；false 关闭） */
+  soundOn: boolean
+}
+
 /** 领域数据快照：localStorage 版单 key 整体持久化 */
 export interface EarthData {
   profile: PlayerProfile | null
@@ -125,4 +131,5 @@ export interface EarthData {
   assets: Asset[]
   savingsAccounts: SavingsAccount[]
   bills: Bill[]
+  settings: AppSettings
 }

@@ -9,6 +9,8 @@ import type { CSSProperties } from 'react'
 import type { HabitState, RejectReason, WorkSchedule } from '../../engine/types'
 import { FORMED_DAYS, buildAutoNote } from '../../engine/engine'
 import { earthStorage } from '../../storage/storage'
+import { parseData, serializeData } from '../../storage/storage'
+import { playChime, isSoundEnabled } from '../../util/playChime'
 import { businessDateFromSource, timeProvider } from '../../time/timeProvider'
 import type { TimeSource } from '../../time/timeProvider'
 import { PetCard } from '../pet/PetCard'
@@ -95,6 +97,11 @@ function HabitScreen() {
   const [editGoal, setEditGoal] = useState('')
   /** R10b-4：「我的故事」时间线开关 */
   const [storyOpen, setStoryOpen] = useState(false)
+
+  /** R10b-5：音效开关（settings.soundOn，默认开） */
+  const [soundOn, setSoundOn] = useState(
+    () => earthStorage.getSettings().soundOn,
+  )
 
   /** R6：schedule 最新值供定时器闭包读取（interval 只注册一次） */
   const scheduleRef = useRef(schedule)
@@ -273,6 +280,7 @@ function HabitScreen() {
     bump()
     if (result.mode === 'minimal') {
       // 最低版本：保住今天，心情不动（无功无过）
+      playChime('minimal', isSoundEnabled(earthStorage.getSettings()))
       setFeedback({ kind: 'ok', text: '今天也算行动了 ✓ 不丢进度，明天从原目标继续' })
       return
     }
@@ -284,6 +292,8 @@ function HabitScreen() {
           ? 'checkin-extra'
           : 'checkin'
     recordPetMood({ storage: earthStorage }, moodEvent)
+    // R10b-5：打卡音效（超额/达标差异音高）
+    playChime(result.warning ? 'extra' : 'achieved', isSoundEnabled(earthStorage.getSettings()))
     // UX-1：按真实完成量分叉反馈（达标 / 未达标 / 超额），不虚假成功
     setFeedback({
       kind: result.warning ? 'warn' : 'ok',
@@ -380,6 +390,7 @@ function HabitScreen() {
     }
     bump()
     recordPetMood({ storage: earthStorage }, 'rest-day')
+    playChime('rest', isSoundEnabled(earthStorage.getSettings()))
     setFeedback({ kind: 'ok', text: '今日休息，休息券 -1，明天满血回归' })
   }
 
@@ -435,6 +446,72 @@ function HabitScreen() {
     setCapInput('')
     setRenameInput('')
     setFeedback({ kind: 'ok', text: '主线习惯已删除，第一个支线已自动提升为主线' })
+  }
+
+  /** R10b-5：音效开关（持久化到 settings.soundOn） */
+  const onToggleSound = () => {
+    setError(null)
+    const enabled = !soundOn
+    earthStorage.updateSettings({ soundOn: enabled })
+    setSoundOn(enabled)
+    setFeedback({ kind: 'ok', text: enabled ? '打击音效已开启' : '打击音效已关闭' })
+  }
+
+  /** R10b-5：导出存档（下载完整 EarthData JSON 到本地文件） */
+  const onExportData = () => {
+    setError(null)
+    const data = earthStorage.read()
+    const json = serializeData(data)
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
+    a.download = `earthol-backup-${ts}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setFeedback({ kind: 'ok', text: '存档已导出，可备份或迁移设备' })
+  }
+
+  /**
+   * R10b-5：导入存档。
+   * 先校验（版本/结构），通过后再覆盖；覆盖前自动导出当前数据为备份（时间戳文件）
+   * 以防误覆盖。
+   */
+  const onImportData = (file: File) => {
+    setError(null)
+    file.text().then((json) => {
+      const parsed = parseData(json)
+      if (!parsed.data || parsed.error) {
+        const label =
+          parsed.error === 'invalid-json'
+            ? '文件不是有效的 JSON'
+            : parsed.error === 'wrong-version'
+              ? '存档版本与当前应用不匹配'
+              : '存档结构不完整'
+        setError(`导入失败：${label}`)
+        return
+      }
+      const confirmed = window.confirm('导入将覆盖当前全部本地数据，且不可撤销。确定继续吗？')
+      if (!confirmed) return
+      // 覆盖前先自动导出一份当前数据备份，防止误覆盖丢档
+      const backupJson = serializeData(earthStorage.read())
+      const blob = new Blob([backupJson], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      a.download = `earthol-before-import-${ts}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      earthStorage.replaceAll(parsed.data)
+      bump()
+      setFeedback({ kind: 'ok', text: '存档已导入，数据已恢复' })
+    })
   }
 
   const timeLabel = timeSource
@@ -506,6 +583,18 @@ function HabitScreen() {
               {businessDate ? `（按网络时间）${formatBusinessDateReadable(businessDate)}` : '解析中…'}
             </span>
           </div>
+          {/* R10b-5：音效开关（游戏化薄层，默认开） */}
+          <div style={row}>
+            <span style={smallLabel}>音效</span>
+            <button
+              type="button"
+              onClick={onToggleSound}
+              style={{ background: soundOn ? '#153a2c' : '#1b1b33', color: soundOn ? '#7ee0a8' : '#e5e5f0', border: `1px solid ${soundOn ? '#2c8a5a' : '#2c2c4a'}`, borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
+            >
+              {soundOn ? '已开启' : '已关闭'}
+            </button>
+            <span style={{ fontSize: 11, color: '#5a5a74' }}>打卡时有提示音</span>
+          </div>
           <div style={{ borderTop: '1px solid #2c2c4a', marginTop: 8, paddingTop: 8 }}>
             {!editProfileOpen ? (
               <button
@@ -553,6 +642,37 @@ function HabitScreen() {
                 </div>
               </div>
             )}
+          </div>
+          {/* R10b-5：数据导出/导入 + 诚实告知（本地存储） */}
+          <div style={{ borderTop: '1px solid #2c2c4a', marginTop: 8, paddingTop: 8 }}>
+            <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>数据</div>
+            <div style={{ fontSize: 12, color: '#5a5a74', marginBottom: 8, lineHeight: 1.7 }}>
+              你的数据保存在本机浏览器（localStorage），导出一份存档即可备份或迁移到其他设备。
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={onExportData}
+                style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 13, cursor: 'pointer' }}
+              >
+                导出存档
+              </button>
+              <label
+                style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 6, border: '1px solid #2c8a5a', background: '#153a2c', color: '#7ee0a8', fontSize: 13, cursor: 'pointer' }}
+              >
+                导入存档
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) onImportData(file)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
           </div>
         </div>
       </details>
@@ -1135,9 +1255,11 @@ function SideHabitCard({ habit, businessDate, schedule, now, onChanged }: SideHa
     }
     onChanged()
     if (result.mode === 'minimal') {
+      playChime('minimal', isSoundEnabled(earthStorage.getSettings()))
       setFeedback({ kind: 'ok', text: '今天也算行动了 ✓ 不丢进度，明天从原目标继续' })
       return
     }
+    playChime(result.warning ? 'extra' : 'achieved', isSoundEnabled(earthStorage.getSettings()))
     setFeedback({
       kind: result.warning ? 'warn' : 'ok',
       text: buildCheckinResultNotice(result),
@@ -1156,6 +1278,7 @@ function SideHabitCard({ habit, businessDate, schedule, now, onChanged }: SideHa
       return
     }
     onChanged()
+    playChime('rest', isSoundEnabled(earthStorage.getSettings()))
     setFeedback({ kind: 'ok', text: '今日休息，休息券 -1，明天满血回归' })
   }
 

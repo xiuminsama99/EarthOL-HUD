@@ -11,6 +11,7 @@
  */
 import type {
   Asset,
+  AppSettings,
   AuditScores,
   Bill,
   CheckinRecord,
@@ -24,6 +25,11 @@ import type { HabitState } from '../engine/types'
 export const STORAGE_KEY = 'earthol-hud:data'
 export const CURRENT_VERSION = 2
 
+/** 应用级设置的默认值（缺失字段 / 旧数据兜底） */
+export const DEFAULT_SETTINGS: AppSettings = {
+  soundOn: true,
+}
+
 /** 空数据快照（全新安装起点 / 损坏兜底） */
 export function emptyData(): EarthData {
   return {
@@ -34,7 +40,46 @@ export function emptyData(): EarthData {
     assets: [],
     savingsAccounts: [],
     bills: [],
+    settings: { ...DEFAULT_SETTINGS },
   }
+}
+
+/** 导入解析错误码（R10b-5）：供 UI 反馈与测试断言 */
+export type ParseErrorCode = 'invalid-json' | 'wrong-version' | 'invalid-structure'
+
+/**
+ * 序列化完整数据为可下载的存档 JSON（含版本 envelope，保留未来迁移升级能力）。
+ * 与本层持久化格式一致：{ version, data }。
+ */
+export function serializeData(data: EarthData): string {
+  return JSON.stringify({ version: CURRENT_VERSION, data }, null, 2)
+}
+
+/**
+ * 解析导入的存档 JSON。
+ * - 损坏 JSON → 'invalid-json'
+ * - 版本缺失/超前/落后于当前 → 'wrong-version'（拒绝跨版本导入，避免脏数据）
+ * - 结构非法（validateData 返回 null）→ 'invalid-structure'
+ * 合法则返回规范化后的数据（字段兜底由 validateData 保证）。
+ */
+export function parseData(json: string): { data: EarthData | null; error: ParseErrorCode | null } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch {
+    return { data: null, error: 'invalid-json' }
+  }
+  if (!isRecord(parsed) || typeof parsed.version !== 'number') {
+    return { data: null, error: 'wrong-version' }
+  }
+  if (parsed.version !== CURRENT_VERSION) {
+    return { data: null, error: 'wrong-version' }
+  }
+  const validated = validateData(parsed.data)
+  if (!validated) {
+    return { data: null, error: 'invalid-structure' }
+  }
+  return { data: validated, error: null }
 }
 
 /**
@@ -136,6 +181,14 @@ function normalizeCheckin(c: unknown): CheckinRecord {
   }
 }
 
+/** 应用设置规范化：缺失字段补默认值（旧数据兜底） */
+function normalizeSettings(s: unknown): AppSettings {
+  const x = (s ?? {}) as Partial<AppSettings>
+  return {
+    soundOn: x.soundOn !== false,
+  }
+}
+
 /** 校验快照结构；非法返回 null（触发兜底） */
 function validateData(value: unknown): EarthData | null {
   if (!isRecord(value)) return null
@@ -155,6 +208,7 @@ function validateData(value: unknown): EarthData | null {
     assets: d.assets as Asset[],
     savingsAccounts: d.savingsAccounts as SavingsAccount[],
     bills: d.bills as Bill[],
+    settings: normalizeSettings(d.settings),
   }
 }
 
@@ -247,6 +301,25 @@ export class EarthStorage {
   reset(): void {
     const envelope = JSON.stringify({ version: CURRENT_VERSION, data: emptyData() })
     this.backend.setItem(STORAGE_KEY, envelope)
+  }
+
+  /** 整体替换数据快照（R10b-5 导入存档用）；调用方须先经 parseData 校验 */
+  replaceAll(data: EarthData): EarthData {
+    const envelope = JSON.stringify({ version: CURRENT_VERSION, data })
+    this.backend.setItem(STORAGE_KEY, envelope)
+    return data
+  }
+
+  // ---- 应用设置 ----
+  getSettings(): AppSettings {
+    return this.read().settings
+  }
+
+  /** 打补丁合并设置（缺省保持原值） */
+  updateSettings(patch: Partial<AppSettings>): AppSettings {
+    const next: AppSettings = { ...this.getSettings(), ...patch }
+    this.update((d) => ({ ...d, settings: next }))
+    return next
   }
 
   // ---- 玩家档案 ----
