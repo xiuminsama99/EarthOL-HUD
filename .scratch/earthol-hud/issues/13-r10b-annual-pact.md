@@ -2,7 +2,9 @@
 
 **What to build:** 把等差数列的复利力量可视化——主界面新增「一年之约」年度成就面板。用户核心诉求：让用户看到"坚持一年 = 多少总量"的震撼大数（小目标每天多做一个 + 上限可定 + 漏卡从总数扣但总量依然巨大）。
 
-**Status:** ready-for-agent
+**Status:** done（已实现并推送）
+
+**Done**：引擎 `projectAnnual` + UI `AnnualGoalPanel` + flow `buildAnnualPanelCopy`。265/265 全绿（+15），tsc/oxlint/build 全过。提交 `c234916`（实现）+ `fa9c88c`（docs）。
 
 ## 设计
 
