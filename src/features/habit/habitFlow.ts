@@ -64,6 +64,7 @@ export interface HabitDeps {
     | 'getProfile'
     | 'removeHabit'
     | 'updateProfile'
+    | 'listHabits'
   >
 }
 
@@ -89,8 +90,23 @@ export interface CreateResult {
 /** 业务日格式 YYYY-MM-DD（createHabit 防御校验用） */
 const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
+/** 最多习惯数：1 主线 + 2 支线（工单 14 破除单习惯限制） */
+export const MAX_HABITS = 3
+
+/** 是否已达容量上限（UI 隐藏「再加一个」入口 + flow 层兜底拦截） */
+export function isAtHabitCapacity(deps: HabitDeps): boolean {
+  return deps.storage.listHabits().length >= MAX_HABITS
+}
+
 /** 建习惯：校验 → 构造领域对象 → 持久化 */
 export function createHabit(deps: HabitDeps, input: NewHabitInput): CreateResult {
+  // 工单 14：容量上限（1 主线 + 2 支线），超限拒绝并说明
+  if (isAtHabitCapacity(deps)) {
+    return {
+      habit: null,
+      error: `最多建立 ${MAX_HABITS} 个习惯（1 个主线 + 2 个支线）`,
+    }
+  }
   const name = input.name.trim()
   if (name.length === 0) return { habit: null, error: '习惯名称不能为空' }
   if (name.length > 40) return { habit: null, error: '习惯名称最长 40 字' }

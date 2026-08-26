@@ -234,3 +234,29 @@ describe('R-4：最近 7 天行动率', () => {
   })
 })
 
+
+describe('R10b-2 多习惯：仪表盘汇总口径（行动天数/总量）合并全部习惯', () => {
+  it('行动天数 = 任意习惯有打卡的天数（去重，跨习惯同天只算一天）', () => {
+    const habits = [
+      makeHabit({ id: 'h1', name: '阅读' }),
+      makeHabit({ id: 'h2', name: '俯卧撑' }),
+    ]
+    const checkins = [
+      makeCheckin({ id: 'c1', habitId: 'h1', businessDate: '2026-01-10' }),
+      makeCheckin({ id: 'c2', habitId: 'h2', businessDate: '2026-01-10' }), // 同日第二习惯
+      makeCheckin({ id: 'c3', habitId: 'h2', businessDate: '2026-01-11' }),
+    ]
+    const scale = computeScaleData(habits, checkins)
+    expect(scale.actionDays).toBe(2) // 01-10、01-11，同日去重
+    expect(scale.actionCount).toBe(3)
+  })
+
+  it('总量 = 全部习惯 totalAmount 之和（换习惯不缩水）', () => {
+    const habits = [
+      makeHabit({ id: 'h1', totalAmount: 12 }),
+      makeHabit({ id: 'h2', totalAmount: 30 }),
+      makeHabit({ id: 'h3', totalAmount: 8 }),
+    ]
+    expect(computeScaleData(habits, []).totalAmount).toBe(50)
+  })
+})

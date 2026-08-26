@@ -25,6 +25,8 @@ import {
   habitBadgeLabel,
   isPrefillableHabitDesc,
   formatBusinessDateReadable,
+  MAX_HABITS,
+  isAtHabitCapacity,
   type CheckinOutcome,
   type HabitDeps,
 } from './habitFlow'
@@ -1036,5 +1038,184 @@ describe('R10b-1 一年之约面板文案（buildAnnualPanelCopy）', () => {
     const p = projectAnnual(habit, '2026-01-01')
     const c = buildAnnualPanelCopy(p, habit)
     expect(c.headline).toBe('66,795 次')
+  })
+})
+
+describe('R10b-2 多习惯：容量上限（1 主线 + 2 支线）', () => {
+  it('最多 3 个习惯：第 4 个被拒并提示', () => {
+    const { deps, storage } = makeDeps()
+    for (let i = 1; i <= 3; i += 1) {
+      const r = createHabit(deps, {
+        name: `习惯${i}`,
+        direction: 'positive',
+        baseAmount: 1,
+        cap: null,
+        createdAt: BUSINESS_DATE,
+      })
+      expect(r.error).toBeNull()
+    }
+    expect(storage.listHabits().length).toBe(3)
+    // 第 4 个被拒：容量上限
+    const fourth = createHabit(deps, {
+      name: '习惯4',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    expect(fourth.error).toContain('最多')
+    expect(fourth.habit).toBeNull()
+    expect(storage.listHabits().length).toBe(3)
+  })
+
+  it('isAtHabitCapacity：满 3 为 true，未满为 false', () => {
+    const { deps } = makeDeps()
+    expect(isAtHabitCapacity(deps)).toBe(false)
+    createHabit(deps, {
+      name: 'a',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    expect(isAtHabitCapacity(deps)).toBe(false)
+    createHabit(deps, {
+      name: 'b',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    createHabit(deps, {
+      name: 'c',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    expect(isAtHabitCapacity(deps)).toBe(true)
+  })
+
+  it('MAX_HABITS = 3', () => {
+    expect(MAX_HABITS).toBe(3)
+  })
+})
+
+describe('R10b-2 多习惯：主线删除后第一个支线自动升为主线（数组序）', () => {
+  it('删除主线（index 0）后，原第一个支线成为新的主线（habits[0]）', () => {
+    const { deps, storage } = makeDeps()
+    const main = createHabit(deps, {
+      name: '主线',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    createHabit(deps, {
+      name: '支线A',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    createHabit(deps, {
+      name: '支线B',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    })
+    // 删除主线
+    const del = deleteHabit(deps, main.id)
+    expect(del.ok).toBe(true)
+    const rest = storage.listHabits()
+    expect(rest.length).toBe(2)
+    // 新的主线 = 原第一个支线（数组序自动前移）
+    expect(rest[0].name).toBe('支线A')
+    expect(rest[1].name).toBe('支线B')
+  })
+
+  it('删除支线不影响主线（主线仍为 index 0）', () => {
+    const { deps, storage } = makeDeps()
+    const main = createHabit(deps, {
+      name: '主线',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    const side = createHabit(deps, {
+      name: '支线A',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    deleteHabit(deps, side.id)
+    const rest = storage.listHabits()
+    expect(rest.length).toBe(1)
+    expect(rest[0].name).toBe('主线')
+    expect(rest[0].id).toBe(main.id)
+  })
+})
+
+describe('R10b-2 多习惯：各自独立打卡（支线不干扰主线）', () => {
+  it('主线与支线同一天各自达标打卡：各自进度独立推进，总量在仪表盘合并', () => {
+    const { deps, storage } = makeDeps()
+    storage.updateProfile({ identityStatement: '健康的人' })
+    const main = createHabit(deps, {
+      name: '俯卧撑',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    const side = createHabit(deps, {
+      name: '喝水',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    // 主线达标
+    const m = performCheckin(deps, main, NOW, 'day', { amount: 1 })
+    expect(m.result.status).toBe('checked-in')
+    // 支线达标（不同习惯，同一天）
+    const s = performCheckin(deps, side, NOW, 'day', { amount: 1 })
+    expect(s.result.status).toBe('checked-in')
+    // 各自进度独立
+    const habits = storage.listHabits()
+    const mainAfter = habits.find((h) => h.id === main.id)!
+    const sideAfter = habits.find((h) => h.id === side.id)!
+    expect(mainAfter.progressStep).toBe(1)
+    expect(sideAfter.progressStep).toBe(1)
+    expect(mainAfter.lastCheckinDate).toBe(BUSINESS_DATE)
+    expect(sideAfter.lastCheckinDate).toBe(BUSINESS_DATE)
+    // 总量合并（2 条打卡记录，仪表盘口径由 scaleFlow 负责，此处验证各自 totalAmount）
+    expect(mainAfter.totalAmount).toBe(1)
+    expect(sideAfter.totalAmount).toBe(1)
+  })
+
+  it('支线打卡不影响主线的「一键打卡」状态（主线 lastCheckinDate 独立）', () => {
+    const { deps, storage } = makeDeps()
+    const main = createHabit(deps, {
+      name: '主线',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    const side = createHabit(deps, {
+      name: '支线',
+      direction: 'positive',
+      baseAmount: 1,
+      cap: null,
+      createdAt: BUSINESS_DATE,
+    }).habit!
+    // 只打支线
+    void performCheckin(deps, side, NOW, 'day', { amount: 1 })
+    const mainAfter = storage.listHabits().find((h) => h.id === main.id)!
+    // 主线今天仍未打卡（未被打断）
+    expect(mainAfter.lastCheckinDate).toBeNull()
   })
 })

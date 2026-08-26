@@ -76,12 +76,43 @@ function dayOfWeek(key: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
 }
 
-/** 单日记录：按业务日分组（同日期多条取 createdAt 最新一条，防御性） */
+/** 单日行动记录基础强度（未考虑缺勤归来降档）：数值越大越成功；休息日为特殊标记，不与行动比较 */
+function actionLevelOf(rec: CheckinRecord): number {
+  if (rec.mode === 'minimal') return 1
+  if (rec.amount > rec.targetAmount) return 3
+  if (rec.amount === rec.targetAmount) return 2
+  return 1
+}
+
+/**
+ * 单日记录：按业务日聚合，跨习惯取「当天最佳结果」（工单 14：热力图 = 任意习惯当天最佳结果）。
+ * 语义：优先取真实行动日的最高档（超额 3 > 达标 2 > 行动 1）；
+ * 仅当该日无任何行动记录时才标记为休息日（4）。一天只要有一次达标，就体现为行动（不被休息盖过）。
+ */
 function groupByDate(checkins: CheckinRecord[]): Map<string, CheckinRecord> {
   const map = new Map<string, CheckinRecord>()
   for (const rec of checkins) {
     const prev = map.get(rec.businessDate)
-    if (!prev || rec.createdAt > prev.createdAt) {
+    if (!prev) {
+      map.set(rec.businessDate, rec)
+      continue
+    }
+    const prevRest = prev.restDay
+    const curRest = rec.restDay
+    // 用真实行动的较高档盖过休息：只要本日有行动，就不用休息日代表
+    if (curRest && !prevRest) continue
+    if (!curRest && prevRest) {
+      map.set(rec.businessDate, rec)
+      continue
+    }
+    if (!curRest && !prevRest) {
+      if (actionLevelOf(rec) > actionLevelOf(prev)) {
+        map.set(rec.businessDate, rec)
+      }
+      continue
+    }
+    // 两者都是休息日：取最新（防御性）
+    if (rec.createdAt > prev.createdAt) {
       map.set(rec.businessDate, rec)
     }
   }

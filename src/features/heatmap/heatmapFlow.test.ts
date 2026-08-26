@@ -187,3 +187,37 @@ describe('R4：minimal 最低版本分档', () => {
     expect(cellOf(cells, '2026-08-25').level).toBe(1)
   })
 })
+
+describe('R10b-2 多习惯：热力图按天取跨习惯最佳结果', () => {
+  it('两个习惯同一天打卡：取更高档（超额 3 > 达标 2）作为该日代表', () => {
+    const checkins = [
+      rec({ habitId: 'hA', amount: 5, createdAt: '2026-08-25T08:00:00.000Z' }), // 达标 2 档
+      rec({ habitId: 'hB', amount: 8, createdAt: '2026-08-25T09:00:00.000Z' }), // 超额 3 档
+    ]
+    const cells = computeHeatmap(checkins, '2026-08-25', 1)
+    const cell = cellOf(cells, '2026-08-25')
+    expect(cell.level).toBe(3)
+    expect(cell.isAction).toBe(true)
+  })
+
+  it('两个习惯同一天：一个休息、一个达标 → 达标（2）代表行动日，不归为休息', () => {
+    const checkins = [
+      rec({ habitId: 'hA', amount: 0, restDay: true, createdAt: '2026-08-25T08:00:00.000Z' }),
+      rec({ habitId: 'hB', amount: 5, createdAt: '2026-08-25T09:00:00.000Z' }), // 达标 2 档
+    ]
+    const cells = computeHeatmap(checkins, '2026-08-25', 1)
+    const cell = cellOf(cells, '2026-08-25')
+    expect(cell.level).toBe(2)
+    expect(cell.isAction).toBe(true)
+    expect(cell.isRest).toBe(false)
+  })
+
+  it('两个习惯同一天都未达标 → 按最高档归一（都不达标为 1）', () => {
+    const checkins = [
+      rec({ habitId: 'hA', amount: 3, createdAt: '2026-08-25T08:00:00.000Z' }), // 未达标 1 档
+      rec({ habitId: 'hB', amount: 4, createdAt: '2026-08-25T09:00:00.000Z' }), // 未达标 1 档
+    ]
+    const cells = computeHeatmap(checkins, '2026-08-25', 1)
+    expect(cellOf(cells, '2026-08-25').level).toBe(1)
+  })
+})

@@ -32,7 +32,9 @@ import {
   habitBadgeLabel,
   isZeroTarget,
   formatBusinessDateReadable,
+  MAX_HABITS,
 } from './habitFlow'
+import type { TodayPlan } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
 import { AnnualGoalPanel } from './AnnualGoalPanel'
@@ -84,6 +86,8 @@ function HabitScreen() {
   const [renameInput, setRenameInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  /** 工单 14：是否正在添加新习惯（已有习惯时「再加一个」打开表单） */
+  const [addingHabit, setAddingHabit] = useState(false)
   /** P1-2：编辑身份/年度目标折叠区状态 */
   const [editProfileOpen, setEditProfileOpen] = useState(false)
   const [editIdentity, setEditIdentity] = useState('')
@@ -173,6 +177,8 @@ function HabitScreen() {
     () => earthStorage.listHabits(),
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
   )
+  /** 工单 14：支线习惯 = 主线之后最多 2 个（主线 = habits[0]） */
+  const sideHabits = useMemo(() => habits.slice(1, 3), [habits])
   const checkins = useMemo(
     () => earthStorage.listCheckins(),
     [refresh], // eslint-disable-line react-hooks/exhaustive-deps
@@ -237,13 +243,13 @@ function HabitScreen() {
     setNote('')
   }
 
-  /** 打卡动作统一入口：引擎判定 + 宠物心情联动 + 反馈（工单 06 起一键打卡复用） */
-  const runCheckin = (action: CheckinAction) => {
+  /** 打卡动作统一入口：引擎判定 + 宠物心情联动 + 反馈（工单 06 起一键打卡复用；工单 14 起按习惯参数化） */
+  const runCheckin = (targetHabit: HabitState, targetPlan: TodayPlan, action: CheckinAction) => {
     setError(null)
-    if (!habit || !timeSource || !plan) return
+    if (!timeSource) return
     const outcome = performCheckin(
       { storage: earthStorage },
-      habit,
+      targetHabit,
       timeSource.now,
       schedule,
       action,
@@ -261,7 +267,7 @@ function HabitScreen() {
     }
     // 宠物心情联动：缺勤归来 → 低落；超额 → 更开心；达标 → 开心
     const moodEvent: PetMoodEvent =
-      (plan.backoffDays ?? 0) > 0
+      (targetPlan.backoffDays ?? 0) > 0
         ? 'checkin-backoff'
         : result.warning
           ? 'checkin-extra'
@@ -317,14 +323,6 @@ function HabitScreen() {
     setError(null)
   }
 
-  const onCreate = (input: NewHabitInput): { error: string | null } => {
-    const result = createHabit({ storage: earthStorage }, input)
-    if (result.error) return { error: result.error }
-    bump()
-    setFeedback({ kind: 'ok', text: `习惯「${result.habit!.name}」已建立，从今天开始` })
-    return { error: null }
-  }
-
   const onCheckin = () => {
     const value = Number(amount)
     // UX-1：拒绝空/0 完成量（引擎 0 是合法语义，此处拦截误操作；反向触底的一键打卡走 onOneTap 不受影响）
@@ -332,7 +330,8 @@ function HabitScreen() {
       setError('完成量至少 1')
       return
     }
-    runCheckin({
+    if (!habit || !plan) return
+    runCheckin(habit, plan, {
       amount: value,
       note: note.trim() === '' ? undefined : note,
     })
@@ -340,18 +339,20 @@ function HabitScreen() {
 
   /** 一键打卡（工单 06）：底部大按钮，按当日目标量达标打卡，零输入 */
   const onOneTap = () => {
-    if (!plan) return
-    runCheckin({ amount: plan.target })
+    if (!habit || !plan) return
+    runCheckin(habit, plan, { amount: plan.target })
   }
 
   /** 快捷打卡（UX-16/20）：卡片内「刚好达标 / 多做了 N」点击即直接打卡，不再只填输入框 */
   const onQuickCheckin = (value: number) => {
-    runCheckin({ amount: value, note: note.trim() === '' ? undefined : note })
+    if (!habit || !plan) return
+    runCheckin(habit, plan, { amount: value, note: note.trim() === '' ? undefined : note })
   }
 
   /** 最低版本（R4）：状态差保底行动，不丢养成进度 */
   const onMinimalCheckin = () => {
-    runCheckin({ amount: 1, mode: 'minimal' })
+    if (!habit || !plan) return
+    runCheckin(habit, plan, { amount: 1, mode: 'minimal' })
   }
 
   const onRestDay = () => {
@@ -398,6 +399,16 @@ function HabitScreen() {
     setFeedback({ kind: 'ok', text: `习惯已改名为「${result.habit!.name}」` })
   }
 
+  /** 工单 14：新增习惯（建立第一个 / 再加支线均走此） */
+  const onCreate = (input: NewHabitInput): { error: string | null } => {
+    const result = createHabit({ storage: earthStorage }, input)
+    if (result.error) return { error: result.error }
+    bump()
+    setAddingHabit(false)
+    setFeedback({ kind: 'ok', text: `习惯「${result.habit!.name}」已建立，从今天开始` })
+    return { error: null }
+  }
+
   /** B6：删除（二次确认，关联打卡记录保留） */
   const onDelete = () => {
     setError(null)
@@ -412,7 +423,7 @@ function HabitScreen() {
     bump()
     setCapInput('')
     setRenameInput('')
-    setFeedback({ kind: 'ok', text: '习惯已删除，可以建立新的习惯了' })
+    setFeedback({ kind: 'ok', text: '主线习惯已删除，第一个支线已自动提升为主线' })
   }
 
   const timeLabel = timeSource
@@ -547,6 +558,7 @@ function HabitScreen() {
           解析时间中…
         </div>
       ) : !habit || !plan ? (
+        // 初次（无任何习惯）：建第一个习惯
         <CreateHabitForm
           businessDate={businessDate}
           onSubmit={onCreate}
@@ -555,7 +567,7 @@ function HabitScreen() {
         />
       ) : (
         <>
-          {/* 工单 13：一年之约——把等差数列的复利力量可视化（主界面习惯区上方） */}
+          {/* 工单 13：一年之约——把等差数列的复利力量可视化（主线习惯区上方） */}
           <AnnualGoalPanel habit={habit} businessDate={businessDate} />
           <HabitPanel
             habit={habit}
@@ -581,6 +593,49 @@ function HabitScreen() {
             onRename={onRename}
             onDelete={onDelete}
           />
+
+          {/* 工单 14：支线习惯（最多 2 个）——折叠卡片，各自动态调节 + 打卡 */}
+          {sideHabits.map((side) => (
+            <SideHabitCard
+              key={side.id}
+              habit={side}
+              businessDate={businessDate}
+              schedule={schedule}
+              onChanged={bump}
+            />
+          ))}
+
+          {/* 工单 14：再加一个习惯（容量内入口；满 3 隐藏） */}
+          {addingHabit ? (
+            <div style={{ marginTop: 16 }}>
+              <CreateHabitForm businessDate={businessDate} onSubmit={onCreate} />
+              <button
+                type="button"
+                onClick={() => setAddingHabit(false)}
+                style={{ marginTop: 8, color: '#8b8ba3', background: 'transparent', border: 'none', fontSize: 13, cursor: 'pointer' }}
+              >
+                取消添加
+              </button>
+            </div>
+          ) : sideHabits.length < MAX_HABITS - 1 ? (
+            <button
+              type="button"
+              onClick={() => setAddingHabit(true)}
+              style={{
+                width: '100%',
+                marginTop: 16,
+                padding: '12px 0',
+                borderRadius: 8,
+                border: '1px dashed #2c2c4a',
+                background: 'transparent',
+                color: '#8b8ba3',
+                fontSize: 14,
+                cursor: 'pointer',
+              }}
+            >
+              ＋ 再加一个习惯（最多 {MAX_HABITS} 个）
+            </button>
+          ) : null}
         </>
       )}
 
@@ -999,3 +1054,296 @@ function HabitPanel(props: HabitPanelProps) {
 }
 
 export default HabitScreen
+
+/**
+ * 工单 14：支线习惯卡片（折叠）。
+ * 薄壳：收到支线习惯 → 自行调 habitFlow 的 planToday / performCheckin，
+ * 事件回调 onChanged 通知父组件刷新（升主线 / 刷新汇总口径）。
+ * 支线默认隐藏完整控制区（展开可打卡/休息/最低版本/改名/删除），避免一屏过密。
+ */
+interface SideHabitCardProps {
+  habit: HabitState
+  businessDate: string
+  schedule: WorkSchedule
+  onChanged(): void
+}
+
+function SideHabitCard({ habit, businessDate, schedule, onChanged }: SideHabitCardProps) {
+  const [open, setOpen] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [renameInput, setRenameInput] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
+
+  /** 支线当前状态也随父刷新重算（来自 props，无独立业务状态） */
+  const plan = planToday(habit, businessDate)
+  const todayChecked = habit.lastCheckinDate === businessDate
+  const zeroTarget = isZeroTarget(habit, businessDate)
+  const quickExtras = habit.direction === 'positive' ? [0, 1, 2, 5] : [0]
+
+  const doCheckin = (action: CheckinAction) => {
+    setError(null)
+    const outcome = performCheckin({ storage: earthStorage }, habit, new Date(), schedule, action)
+    const { result } = outcome
+    if (result.status === 'rejected') {
+      setError(REJECT_LABEL[result.reason!])
+      return
+    }
+    onChanged()
+    if (result.mode === 'minimal') {
+      setFeedback({ kind: 'ok', text: '今天也算行动了 ✓ 不丢进度，明天从原目标继续' })
+      return
+    }
+    setFeedback({
+      kind: result.warning ? 'warn' : 'ok',
+      text: buildCheckinResultNotice(result),
+    })
+  }
+
+  const onRest = () => {
+    setError(null)
+    const outcome = performCheckin({ storage: earthStorage }, habit, new Date(), schedule, {
+      amount: 0,
+      restDay: true,
+    })
+    const { result } = outcome
+    if (result.status === 'rejected') {
+      setError(REJECT_LABEL[result.reason!])
+      return
+    }
+    onChanged()
+    setFeedback({ kind: 'ok', text: '今日休息，休息券 -1，明天满血回归' })
+  }
+
+  const onRename = () => {
+    setError(null)
+    const result = renameHabit({ storage: earthStorage }, habit.id, renameInput)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    onChanged()
+    setRenameInput('')
+    setFeedback({ kind: 'ok', text: `习惯已改名为「${result.habit!.name}」` })
+  }
+
+  const onDelete = () => {
+    setError(null)
+    const confirmed = window.confirm(`确定删除习惯「${habit.name}」吗？历史打卡记录会保留。`)
+    if (!confirmed) return
+    const result = deleteHabit({ storage: earthStorage }, habit.id)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    onChanged()
+    setFeedback({ kind: 'ok', text: '支线习惯已删除' })
+  }
+
+  return (
+    <div
+      style={{
+        border: '1px solid #2c2c4a',
+        borderRadius: 10,
+        background: '#181830',
+        padding: 14,
+        marginTop: 12,
+      }}
+    >
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{habit.name}</span>
+        <span style={{ fontSize: 12, color: '#8b8ba3' }}>
+          {habitBadgeLabel(habit.direction, habit.cap !== null)}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: 13, color: '#8b8ba3' }}>
+          {todayChecked ? '✓ 今日已打卡' : `今日目标 ${plan.target}`}
+        </span>
+        <span style={{ fontSize: 12, color: '#5a5a74' }}>{open ? '▾' : '▸'}</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 6 }}>
+            总量 {habit.totalAmount} · 达标次数 {habit.consistencyDays} 天 · 休息券 {habit.vacationCoins} 张
+            {habit.isFormed && <span style={{ color: '#7c5cff' }}> · 已养成 ✓</span>}
+          </div>
+
+          {feedback && (
+            <p
+              role="status"
+              style={{
+                padding: '8px 10px',
+                borderRadius: 8,
+                fontSize: 12,
+                margin: '0 0 10px',
+                background: feedback.kind === 'ok' ? '#153a2c' : '#3a2c15',
+                color: feedback.kind === 'ok' ? '#7ee0a8' : '#ffd27a',
+              }}
+            >
+              {feedback.text}
+            </p>
+          )}
+          {error && (
+            <p role="alert" style={{ color: '#ff7a7a', fontSize: 12, margin: '0 0 10px' }}>
+              {error}
+            </p>
+          )}
+
+          {!zeroTarget && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                {quickExtras.map((extra) => (
+                  <button
+                    key={extra}
+                    type="button"
+                    disabled={todayChecked}
+                    onClick={() => doCheckin({ amount: plan.target + extra })}
+                    style={{
+                      flex: 1,
+                      padding: '6px 0',
+                      borderRadius: 6,
+                      border: '1px solid #2c2c4a',
+                      background: todayChecked ? '#2c2c4a' : '#1b1b33',
+                      color: todayChecked ? '#5a5a74' : extra === 0 ? '#e5e5f0' : '#d9b64a',
+                      fontSize: 12,
+                      cursor: todayChecked ? 'default' : 'pointer',
+                    }}
+                  >
+                    {extra === 0 ? '刚好达标' : `多做了 ${extra}（储蓄）`}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={amount}
+                  disabled={todayChecked}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder={`今日目标 ${plan.target}`}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #2c2c4a',
+                    background: '#1b1b33',
+                    color: '#e5e5f0',
+                    fontSize: 14,
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={todayChecked}
+                  onClick={() => doCheckin({ amount: Number(amount) })}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: todayChecked ? '#2c2c4a' : '#7c5cff',
+                    color: todayChecked ? '#5a5a74' : '#fff',
+                    fontSize: 13,
+                    cursor: todayChecked ? 'default' : 'pointer',
+                  }}
+                >
+                  打卡
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              disabled={todayChecked}
+              onClick={() => doCheckin({ amount: 1, mode: 'minimal' })}
+              title="状态差也没关系：做 1 个也算行动，明天从原目标继续"
+              style={{
+                flex: 1,
+                padding: '8px 0',
+                borderRadius: 6,
+                border: '1px solid #2c8a5a',
+                background: todayChecked ? '#2c2c4a' : '#153a2c',
+                color: todayChecked ? '#5a5a74' : '#7ee0a8',
+                fontSize: 12,
+                cursor: todayChecked ? 'default' : 'pointer',
+              }}
+            >
+              做 1 个就算数
+            </button>
+            <button
+              type="button"
+              disabled={todayChecked}
+              onClick={onRest}
+              title="消耗 1 张休息券，今日不打卡也不缺勤"
+              style={{
+                flex: 1,
+                padding: '8px 0',
+                borderRadius: 6,
+                border: '1px solid #2c2c4a',
+                background: todayChecked ? '#2c2c4a' : '#1b1b33',
+                color: todayChecked ? '#5a5a74' : '#e5e5f0',
+                fontSize: 12,
+                cursor: todayChecked ? 'default' : 'pointer',
+              }}
+            >
+              休息
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <input
+              type="text"
+              maxLength={40}
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+              placeholder={`改名（当前：${habit.name}）`}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                borderRadius: 6,
+                border: '1px solid #2c2c4a',
+                background: '#1b1b33',
+                color: '#e5e5f0',
+                fontSize: 13,
+              }}
+            />
+            <button
+              type="button"
+              onClick={onRename}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 6,
+                border: '1px solid #2c2c4a',
+                background: '#1b1b33',
+                color: '#e5e5f0',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              改名
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 6,
+                border: '1px solid #8a2c2c',
+                background: '#3a1515',
+                color: '#ff9a9a',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              删除
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
