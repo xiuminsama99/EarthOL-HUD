@@ -601,6 +601,7 @@ function HabitScreen() {
               habit={side}
               businessDate={businessDate}
               schedule={schedule}
+              now={timeSource!.now}
               onChanged={bump}
             />
           ))}
@@ -1065,10 +1066,12 @@ interface SideHabitCardProps {
   habit: HabitState
   businessDate: string
   schedule: WorkSchedule
+  /** 与主线同源的时间锚点（timeSource.now），避免支线走设备时钟绕过防作弊/B1 守卫 */
+  now: Date
   onChanged(): void
 }
 
-function SideHabitCard({ habit, businessDate, schedule, onChanged }: SideHabitCardProps) {
+function SideHabitCard({ habit, businessDate, schedule, now, onChanged }: SideHabitCardProps) {
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
   const [renameInput, setRenameInput] = useState('')
@@ -1083,7 +1086,7 @@ function SideHabitCard({ habit, businessDate, schedule, onChanged }: SideHabitCa
 
   const doCheckin = (action: CheckinAction) => {
     setError(null)
-    const outcome = performCheckin({ storage: earthStorage }, habit, new Date(), schedule, action)
+    const outcome = performCheckin({ storage: earthStorage }, habit, now, schedule, action)
     const { result } = outcome
     if (result.status === 'rejected') {
       setError(REJECT_LABEL[result.reason!])
@@ -1102,7 +1105,7 @@ function SideHabitCard({ habit, businessDate, schedule, onChanged }: SideHabitCa
 
   const onRest = () => {
     setError(null)
-    const outcome = performCheckin({ storage: earthStorage }, habit, new Date(), schedule, {
+    const outcome = performCheckin({ storage: earthStorage }, habit, now, schedule, {
       amount: 0,
       restDay: true,
     })
