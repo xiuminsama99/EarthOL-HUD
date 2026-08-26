@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NetworkTimeProvider, businessDateFromSource } from './timeProvider'
 
-const DATE_HEADER = 'Tue, 25 Aug 2026 16:41:47 GMT'
+// 动态生成当前时刻前几秒的 Date 头：与系统时钟保持同一业务日，避免硬编码日期跨日触发刷新守卫
+function todayHeader(): string {
+  return new Date(Date.now() - 5000).toUTCString()
+}
+
+const DATE_HEADER = todayHeader()
 
 function makeResponse(dateHeader: string | null): Response {
   const headers = new Headers()
