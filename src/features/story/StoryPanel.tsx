@@ -20,15 +20,7 @@ import { COLORS } from '../../components/ui/theme'
 import { ErrorText } from '../../components/ui/ErrorText'
 import { StatCard } from '../../components/ui/StatCard'
 import { EmptyState } from '../../components/ui/EmptyState'
-
-const overlay: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 50,
-  background: 'rgba(8,8,18,0.92)',
-  overflowY: 'auto',
-  padding: '24px 0 60px',
-}
+import { Modal } from '../../components/ui/Modal'
 
 const sheet: CSSProperties = {
   maxWidth: 480,
@@ -103,7 +95,7 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
   }
 
   return (
-    <div style={overlay} role="dialog" aria-label="我的故事">
+    <Modal label="我的故事">
       <div style={sheet}>
         <div
           style={{
@@ -272,7 +264,7 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
           ))
         )}
       </div>
-    </div>
+    </Modal>
   )
 }
 

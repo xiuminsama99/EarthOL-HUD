@@ -23,6 +23,7 @@ import { REJECT_LABEL } from './habitShared'
 import type { Feedback } from './habitShared'
 import { ErrorText } from '../../components/ui/ErrorText'
 import { FeedbackBanner } from '../../components/ui/FeedbackBanner'
+import { Collapsible } from '../../components/ui/Collapsible'
 
 interface SideHabitCardProps {
   habit: HabitState
@@ -137,22 +138,30 @@ export function SideHabitCard({ habit, businessDate, schedule, now, onChanged }:
         marginTop: 12,
       }}
     >
-      <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-        onClick={() => setOpen((v) => !v)}
+      <Collapsible
+        open={open}
+        onToggle={() => setOpen((v) => !v)}
+        contentStyle={{ marginTop: 12 }}
+        trigger={({ 'aria-expanded': ariaExpanded, role, tabIndex, onKeyDown, toggle }) => (
+          <div
+            role={role}
+            tabIndex={tabIndex}
+            aria-expanded={ariaExpanded}
+            onKeyDown={onKeyDown}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+            onClick={toggle}
+          >
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{habit.name}</span>
+            <span style={{ fontSize: 12, color: '#8b8ba3' }}>
+              {habitBadgeLabel(habit.direction, habit.cap !== null)}
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#8b8ba3' }}>
+              {todayChecked ? '✓ 今日已打卡' : `今日目标 ${plan.target}`}
+            </span>
+            <span style={{ fontSize: 12, color: '#5a5a74' }}>{open ? '▾' : '▸'}</span>
+          </div>
+        )}
       >
-        <span style={{ fontSize: 14, fontWeight: 600 }}>{habit.name}</span>
-        <span style={{ fontSize: 12, color: '#8b8ba3' }}>
-          {habitBadgeLabel(habit.direction, habit.cap !== null)}
-        </span>
-        <span style={{ marginLeft: 'auto', fontSize: 13, color: '#8b8ba3' }}>
-          {todayChecked ? '✓ 今日已打卡' : `今日目标 ${plan.target}`}
-        </span>
-        <span style={{ fontSize: 12, color: '#5a5a74' }}>{open ? '▾' : '▸'}</span>
-      </div>
-
-      {open && (
-        <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, color: '#8b8ba3', marginBottom: 6 }}>
             总量 {habit.totalAmount} · 达标次数 {habit.consistencyDays} 天 · 休息券 {habit.vacationCoins} 张
             {habit.isFormed && <span style={{ color: '#7c5cff' }}> · 已养成 ✓</span>}
@@ -318,8 +327,7 @@ export function SideHabitCard({ habit, businessDate, schedule, now, onChanged }:
               删除
             </button>
           </div>
-        </div>
-      )}
+      </Collapsible>
     </div>
   )
 }
