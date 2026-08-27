@@ -49,6 +49,10 @@ import { HabitPanel } from './HabitPanel'
 import { SideHabitCard } from './SideHabitCard'
 import { REJECT_LABEL } from './habitShared'
 import type { Feedback } from './habitShared'
+import { SettingsPanel } from './SettingsPanel'
+import { OneTapButton } from './OneTapButton'
+import { CelebrationToast } from './CelebrationToast'
+import type { Celebration } from './CelebrationToast'
 
 const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
   day: '白天工作',
@@ -66,8 +70,6 @@ const panel: CSSProperties = {
   fontFamily: 'system-ui, sans-serif',
 }
 
-const row: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', margin: '6px 0' }
-const smallLabel: CSSProperties = { width: 96, color: '#8b8ba3', flexShrink: 0, fontSize: 13 }
 
 function HabitScreen() {
   const [timeSource, setTimeSource] = useState<TimeSource | null>(null)
@@ -90,7 +92,7 @@ function HabitScreen() {
   /** R10b-4：「我的故事」时间线开关 */
   const [storyOpen, setStoryOpen] = useState(false)
   /** R12（工单 19）：打卡成功庆祝反馈（达标/储蓄养成/戒除完成），1 秒自动消退 */
-  const [celebration, setCelebration] = useState<{ text: string; kind: 'ok' | 'extra' | 'formed' } | null>(null)
+  const [celebration, setCelebration] = useState<Celebration | null>(null)
 
   /** R10b-5：音效开关（settings.soundOn，默认开） */
   const [soundOn, setSoundOn] = useState(
@@ -568,146 +570,28 @@ function HabitScreen() {
 
       {businessDate && <HeatmapPanel checkins={checkins} today={businessDate} />}
 
-      {/* UX-9：调试信息（时间校准/今天）移入默认折叠的设置区，用户语言化（P1-7） */}
-      <details
-        style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}
-      >
-        <summary style={{ fontSize: 13, color: '#8b8ba3', cursor: 'pointer', userSelect: 'none' }}>
-          设置（作息 · 宠物提醒 · 身份）
-        </summary>
-        <div style={{ marginTop: 10 }}>
-          <div style={row}>
-            <span style={smallLabel}>作息</span>
-            <button
-              type="button"
-              onClick={toggleSchedule}
-              style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
-            >
-              {SCHEDULE_LABEL[schedule]}
-            </button>
-          </div>
-          <div style={row}>
-            <span style={smallLabel}>宠物提醒</span>
-            <button
-              type="button"
-              onClick={onToggleReminder}
-              style={{ background: reminderEnabled ? '#153a2c' : '#1b1b33', color: reminderEnabled ? '#7ee0a8' : '#e5e5f0', border: `1px solid ${reminderEnabled ? '#2c8a5a' : '#2c2c4a'}`, borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
-            >
-              {reminderEnabled ? '已开启' : '已关闭'}
-            </button>
-            {reminderEnabled && (
-              <input
-                type="time"
-                value={reminderTime}
-                onChange={(e) => onReminderTimeChange(e.target.value)}
-                style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '4px 6px', fontSize: 13 }}
-              />
-            )}
-            <span style={{ fontSize: 11, color: '#5a5a74' }}>应用打开期间</span>
-          </div>
-          <div style={row}>
-            <span style={smallLabel}>时间校准</span>
-            <span style={{ fontSize: 13 }}>{timeLabel}</span>
-          </div>
-          <div style={row}>
-            <span style={smallLabel}>今天</span>
-            <span style={{ fontSize: 13 }}>
-              {businessDate ? `（按网络时间）${formatBusinessDateReadable(businessDate)}` : '解析中…'}
-            </span>
-          </div>
-          {/* R10b-5：音效开关（游戏化薄层，默认开） */}
-          <div style={row}>
-            <span style={smallLabel}>音效</span>
-            <button
-              type="button"
-              onClick={onToggleSound}
-              style={{ background: soundOn ? '#153a2c' : '#1b1b33', color: soundOn ? '#7ee0a8' : '#e5e5f0', border: `1px solid ${soundOn ? '#2c8a5a' : '#2c2c4a'}`, borderRadius: 6, padding: '4px 10px', fontSize: 13 }}
-            >
-              {soundOn ? '已开启' : '已关闭'}
-            </button>
-            <span style={{ fontSize: 11, color: '#5a5a74' }}>打卡时有提示音</span>
-          </div>
-          <div style={{ borderTop: '1px solid #2c2c4a', marginTop: 8, paddingTop: 8 }}>
-            {!editProfileOpen ? (
-              <button
-                type="button"
-                onClick={openEditProfile}
-                style={{ background: '#1b1b33', color: '#e5e5f0', border: '1px solid #2c2c4a', borderRadius: 6, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}
-              >
-                编辑身份宣言 / 年度目标
-              </button>
-            ) : (
-              <div>
-                <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>身份宣言（我是…）</div>
-                <input
-                  type="text"
-                  maxLength={40}
-                  value={editIdentity}
-                  onChange={(e) => setEditIdentity(e.target.value)}
-                  placeholder="如：健康的人"
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 14 }}
-                />
-                <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4, marginTop: 8 }}>年度主线（今年最想完成的一件事）</div>
-                <input
-                  type="text"
-                  maxLength={100}
-                  value={editGoal}
-                  onChange={(e) => setEditGoal(e.target.value)}
-                  placeholder="如：把身体练回二十岁的样子"
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 14 }}
-                />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button
-                    type="button"
-                    onClick={onSaveProfile}
-                    style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: 'none', background: '#7c5cff', color: '#fff', fontSize: 13, cursor: 'pointer' }}
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditProfileOpen(false)}
-                    style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 13, cursor: 'pointer' }}
-                  >
-                    取消
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          {/* R10b-5：数据导出/导入 + 诚实告知（本地存储） */}
-          <div style={{ borderTop: '1px solid #2c2c4a', marginTop: 8, paddingTop: 8 }}>
-            <div style={{ fontSize: 13, color: '#8b8ba3', marginBottom: 4 }}>数据</div>
-            <div style={{ fontSize: 12, color: '#5a5a74', marginBottom: 8, lineHeight: 1.7 }}>
-              你的数据保存在本机浏览器（localStorage），导出一份存档即可备份或迁移到其他设备。
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={onExportData}
-                style={{ flex: 1, padding: '8px 0', borderRadius: 6, border: '1px solid #2c2c4a', background: '#1b1b33', color: '#e5e5f0', fontSize: 13, cursor: 'pointer' }}
-              >
-                导出存档
-              </button>
-              <label
-                style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 6, border: '1px solid #2c8a5a', background: '#153a2c', color: '#7ee0a8', fontSize: 13, cursor: 'pointer' }}
-              >
-                导入存档
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) onImportData(file)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-      </details>
+      <SettingsPanel
+        scheduleLabel={SCHEDULE_LABEL[schedule]}
+        onToggleSchedule={toggleSchedule}
+        reminderEnabled={reminderEnabled}
+        reminderTime={reminderTime}
+        onToggleReminder={onToggleReminder}
+        onReminderTimeChange={onReminderTimeChange}
+        timeLabel={timeLabel}
+        todayLabel={businessDate ? `（按网络时间）${formatBusinessDateReadable(businessDate)}` : '解析中…'}
+        soundOn={soundOn}
+        onToggleSound={onToggleSound}
+        editProfileOpen={editProfileOpen}
+        editIdentity={editIdentity}
+        editGoal={editGoal}
+        setEditIdentity={setEditIdentity}
+        setEditGoal={setEditGoal}
+        setEditProfileOpen={setEditProfileOpen}
+        onOpenEditProfile={openEditProfile}
+        onSaveProfile={onSaveProfile}
+        onExportData={onExportData}
+        onImportData={onImportData}
+      />
 
       {!businessDate ? (
         <div
@@ -828,30 +712,11 @@ function HabitScreen() {
       {/* 底部固定「一键打卡」（工单 06）：一天只需要点一下；超额仍走卡片内快捷按钮
           P1-5：戒除归 0 完成态下禁用，文案改为完成提示 */}
       {habit && plan && (
-        <button
-          type="button"
-          onClick={onOneTap}
-          disabled={todayChecked || zeroTarget}
-          style={{
-            position: 'fixed',
-            bottom: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 'min(calc(100% - 32px), 448px)',
-            padding: '14px 0',
-            borderRadius: 999,
-            border: 'none',
-            background: todayChecked || zeroTarget ? '#2c2c4a' : '#7c5cff',
-            color: todayChecked || zeroTarget ? '#8b8ba3' : '#fff',
-            fontSize: 17,
-            fontWeight: 700,
-            cursor: todayChecked || zeroTarget ? 'default' : 'pointer',
-            boxShadow: todayChecked || zeroTarget ? 'none' : '0 6px 20px rgba(124,92,255,0.35)',
-            zIndex: 10,
-          }}
-        >
-          {zeroTarget ? (todayChecked ? '今日已坚持 ✓' : '继续坚持（今天也没做它）') : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
-        </button>
+        <OneTapButton
+          onOneTap={onOneTap}
+          todayChecked={todayChecked}
+          zeroTarget={zeroTarget}
+        />
       )}
 
       {/* R10b-4：「我的故事」全屏时间线 */}
@@ -867,30 +732,7 @@ function HabitScreen() {
       {achievements.length > 0 && <AchievementPanel achievements={achievements} />}
 
       {/* R12（工单 19）ACH-3：打卡庆祝反馈（达标/储蓄/养成），1 秒自动消退 */}
-      {celebration && (
-        <div
-          className="celebration-toast"
-          style={{
-            position: 'fixed',
-            top: 18,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 20,
-            padding: '8px 22px',
-            borderRadius: 999,
-            fontSize: 15,
-            fontWeight: 700,
-            pointerEvents: 'none',
-            color: celebration.kind === 'extra' ? '#d9b64a' : celebration.kind === 'formed' ? '#7c5cff' : '#7ee0a8',
-            background: 'rgba(20,20,40,0.92)',
-            border: `1px solid ${celebration.kind === 'extra' ? '#d9b64a' : celebration.kind === 'formed' ? '#7c5cff' : '#2c8a5a'}`,
-            boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
-            animation: 'celebrationPop 1s ease-out forwards',
-          }}
-        >
-          {celebration.text}
-        </div>
-      )}
+      {celebration && <CelebrationToast celebration={celebration} />}
     </main>
   )
 }
