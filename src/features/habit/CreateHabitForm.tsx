@@ -9,6 +9,7 @@ import type { FormEvent } from 'react'
 import type { HabitDirection } from '../../engine/types'
 import type { NewHabitInput } from './habitFlow'
 import { isPrefillableHabitDesc } from './habitFlow'
+import { labelStyleForm as labelStyle, inputStyleForm as inputStyle } from '../../components/ui/theme'
 import { HABIT_TEMPLATES, UNIT_OPTIONS } from './habitTemplates'
 import type { HabitTemplate } from './habitTemplates'
 
@@ -26,24 +27,6 @@ const DIRECTION_OPTIONS: { value: HabitDirection; label: string; hint: string }[
   { value: 'positive', label: '养成', hint: '每天多做一点，如：每天读一页书' },
   { value: 'negative', label: '戒除', hint: '每天少做一点，如：每天少吃一口' },
 ]
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 13,
-  color: '#8b8ba3',
-  marginBottom: 4,
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #2c2c4a',
-  background: '#1b1b33',
-  color: '#e5e5f0',
-  fontSize: 16,
-}
 
 export function CreateHabitForm(props: CreateHabitFormProps) {
   /** P1-3：引导坏习惯描述太长（>12 字，通常是一整句话）时不再自动填名称，改为提示 */

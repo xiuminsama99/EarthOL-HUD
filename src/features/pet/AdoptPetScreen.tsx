@@ -6,44 +6,10 @@
  * 文案与身份宣言联动：以「我是___」的身份，领一只陪你 365 天的伙伴。
  */
 import { useState } from 'react'
-import type { CSSProperties } from 'react'
 import { earthStorage } from '../../storage/storage'
+import { panelPage as panel, inputStyle, primaryBtn } from '../../components/ui/theme'
 import { PET_BREEDS, adoptPet } from './petFlow'
 import { PetArt } from './PetArt'
-
-const panel: CSSProperties = {
-  maxWidth: 480,
-  margin: '40px auto',
-  padding: 24,
-  borderRadius: 12,
-  background: '#141428',
-  color: '#e5e5f0',
-  fontFamily: 'system-ui, sans-serif',
-}
-
-const inputStyle: CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #2c2c4a',
-  background: '#1b1b33',
-  color: '#e5e5f0',
-  fontSize: 15,
-  fontFamily: 'inherit',
-}
-
-const primaryBtn: CSSProperties = {
-  width: '100%',
-  padding: '12px',
-  borderRadius: 8,
-  border: 'none',
-  background: '#7c5cff',
-  color: '#fff',
-  fontSize: 16,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
 
 interface AdoptPetScreenProps {
   /** 领养完成后通知父级进入主界面 */

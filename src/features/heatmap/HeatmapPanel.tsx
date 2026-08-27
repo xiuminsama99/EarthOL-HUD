@@ -8,7 +8,7 @@
  * 只读组件：数据经 computeHeatmap 纯函数计算后按周分列渲染。
  */
 import { useMemo } from 'react'
-import type { CSSProperties } from 'react'
+import { panelCard as panel } from '../../components/ui/theme'
 import type { CheckinRecord } from '../../storage/types'
 import { computeHeatmap } from './heatmapFlow'
 import type { HeatmapCell, HeatmapLevel } from './heatmapFlow'
@@ -35,13 +35,6 @@ const LEVEL_LABEL: Record<HeatmapLevel, string> = {
   2: '达标',
   3: '超额',
   4: '休息日',
-}
-
-const panel: CSSProperties = {
-  background: '#1b1b33',
-  borderRadius: 10,
-  padding: '14px 16px',
-  marginBottom: 16,
 }
 
 /** 单元格：未来日留白（transparent），过去/今日按档位着色 */

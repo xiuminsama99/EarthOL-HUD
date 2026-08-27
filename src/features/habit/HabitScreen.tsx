@@ -5,7 +5,6 @@
  * → habitFlow 调引擎判定 + 持久化 → 重新读取渲染。领域规则零散落在引擎。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
 import type { HabitState, WorkSchedule } from '../../engine/types'
 import { buildAutoNote, computeAchievements } from '../../engine/engine'
 import { earthStorage } from '../../storage/storage'
@@ -44,6 +43,7 @@ import { AnnualGoalPanel } from './AnnualGoalPanel'
 import { computeScaleData } from '../scale/scaleFlow'
 import { ScalePanel } from '../scale/ScalePanel'
 import { HeatmapPanel } from '../heatmap/HeatmapPanel'
+import { panelScreen as panel } from '../../components/ui/theme'
 import { updateIdentityAndGoal } from '../onboarding/onboardingFlow'
 import { HabitPanel } from './HabitPanel'
 import { SideHabitCard } from './SideHabitCard'
@@ -58,18 +58,6 @@ const SCHEDULE_LABEL: Record<WorkSchedule, string> = {
   day: '白天工作',
   night: '夜间工作',
 }
-
-const panel: CSSProperties = {
-  maxWidth: 480,
-  margin: '40px auto',
-  padding: 24,
-  paddingBottom: 120, // 给底部固定「一键打卡」留空间
-  borderRadius: 12,
-  background: '#141428',
-  color: '#e5e5f0',
-  fontFamily: 'system-ui, sans-serif',
-}
-
 
 function HabitScreen() {
   const [timeSource, setTimeSource] = useState<TimeSource | null>(null)

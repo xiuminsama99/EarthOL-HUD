@@ -4,8 +4,8 @@
  * 状态与编排逻辑仍在 HabitScreen 主壳，本组件只按 props 渲染并触发回调。
  */
 import type { CSSProperties } from 'react'
+import { row } from '../../components/ui/theme'
 
-const row: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', margin: '6px 0' }
 const smallLabel: CSSProperties = { width: 96, color: '#8b8ba3', flexShrink: 0, fontSize: 13 }
 
 interface SettingsPanelProps {

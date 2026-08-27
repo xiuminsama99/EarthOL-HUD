@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { authProvider } from './auth/authProvider'
+import { row } from './components/ui/theme'
 import type { WorkSchedule } from './engine/types'
 import { earthStorage } from './storage/storage'
 import { switchSchedule } from './features/habit/habitFlow'
@@ -27,7 +28,6 @@ const box: CSSProperties = {
   fontSize: 13,
 }
 
-const row: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', margin: '6px 0' }
 const label: CSSProperties = { width: 72, color: '#8b8ba3', flexShrink: 0 }
 
 function FoundationPanel() {

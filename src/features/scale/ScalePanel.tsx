@@ -10,6 +10,7 @@
  * 只读组件：全部数据由调用方经 computeScaleData 计算后传入。
  */
 import type { CSSProperties } from 'react'
+import { panelCard as panel } from '../../components/ui/theme'
 import { PetArt } from '../pet/PetArt'
 import type { ScaleData } from './scaleFlow'
 
@@ -21,13 +22,6 @@ interface ScalePanelProps {
   identity: string | null
   /** 正愿景展开描述（右盘文案用） */
   vision: string | null
-}
-
-const panel: CSSProperties = {
-  background: '#1b1b33',
-  borderRadius: 10,
-  padding: '14px 16px',
-  marginBottom: 16,
 }
 
 const statBox: CSSProperties = {
