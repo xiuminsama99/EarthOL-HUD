@@ -64,7 +64,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
       style={{ borderBottom: '1px solid #2c2c4a', paddingBottom: 10, marginBottom: 18 }}
     >
       <summary style={{ fontSize: 13, color: '#8b8ba3', cursor: 'pointer', userSelect: 'none' }}>
-        设置（作息 · 宠物提醒 · 身份）
+        设置（作息 · 提醒 · 音效 · 身份 · 数据）
       </summary>
       <div style={{ marginTop: 10 }}>
         <div style={row}>

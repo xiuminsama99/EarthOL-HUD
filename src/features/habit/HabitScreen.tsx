@@ -310,7 +310,7 @@ function HabitScreen() {
       kind: result.warning ? 'extra' : result.formed ? 'formed' : 'ok',
     })
     window.clearTimeout(celebrationTimer.current)
-    celebrationTimer.current = window.setTimeout(() => setCelebration(null), 1000)
+    celebrationTimer.current = window.setTimeout(() => setCelebration(null), 2000)
     // UX-1：按真实完成量分叉反馈（达标 / 未达标 / 超额），不虚假成功
     setFeedback({
       kind: result.warning ? 'warn' : 'ok',

@@ -240,25 +240,54 @@ export function SideHabitCard({ habit, businessDate, schedule, now, onChanged }:
             </div>
           )}
 
+          {zeroTarget && (
+            <div style={{ fontSize: 13, color: '#7ee0a8', lineHeight: 1.5, marginBottom: 8 }}>
+              已戒除到 0，恭喜！
+              <br />
+              <span style={{ fontSize: 11, color: '#8b8ba3' }}>今天也没做它就算成功，守住它</span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              disabled={todayChecked}
-              onClick={() => doCheckin({ amount: 1, mode: 'minimal' })}
-              title="状态差也没关系：做 1 个也算行动，明天从原目标继续"
-              style={{
-                flex: 1,
-                padding: '8px 0',
-                borderRadius: 6,
-                border: '1px solid #2c8a5a',
-                background: todayChecked ? '#2c2c4a' : '#153a2c',
-                color: todayChecked ? '#5a5a74' : '#7ee0a8',
-                fontSize: 12,
-                cursor: todayChecked ? 'default' : 'pointer',
-              }}
-            >
-              做 1 个就算数
-            </button>
+            {zeroTarget ? (
+              <button
+                type="button"
+                disabled={todayChecked}
+                onClick={() => doCheckin({ amount: 0, mode: 'quit-maintain' })}
+                title="保持 0 目标：今天也没做它，继续守住"
+                style={{
+                  flex: 1,
+                  padding: '8px 0',
+                  borderRadius: 6,
+                  border: todayChecked ? '1px solid #2c2c4a' : '1px solid #7c5cff',
+                  background: todayChecked ? '#2c2c4a' : 'rgba(124,92,255,0.15)',
+                  color: todayChecked ? '#5a5a74' : '#b9a8ff',
+                  fontSize: 12,
+                  cursor: todayChecked ? 'default' : 'pointer',
+                }}
+              >
+                {todayChecked ? '今日已坚持 ✓' : '继续坚持（今天也没做它）'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={todayChecked}
+                onClick={() => doCheckin({ amount: 1, mode: 'minimal' })}
+                title="状态差也没关系：做 1 个也算行动，明天从原目标继续"
+                style={{
+                  flex: 1,
+                  padding: '8px 0',
+                  borderRadius: 6,
+                  border: '1px solid #2c8a5a',
+                  background: todayChecked ? '#2c2c4a' : '#153a2c',
+                  color: todayChecked ? '#5a5a74' : '#7ee0a8',
+                  fontSize: 12,
+                  cursor: todayChecked ? 'default' : 'pointer',
+                }}
+              >
+                做 1 个就算数
+              </button>
+            )}
             <button
               type="button"
               disabled={todayChecked}

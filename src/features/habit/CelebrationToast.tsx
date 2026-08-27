@@ -13,7 +13,7 @@ interface CelebrationToastProps {
 
 export function CelebrationToast(props: CelebrationToastProps) {
   const { celebration } = props
-  // R12（工单 19）ACH-3：打卡庆祝反馈（达标/储蓄/养成），1 秒自动消退
+  // R12（工单 19）ACH-3：打卡庆祝反馈（达标/储蓄/养成），2 秒自动消退（R14 由 1s 延至 2s）
   return (
     <div
       className="celebration-toast"
@@ -32,7 +32,7 @@ export function CelebrationToast(props: CelebrationToastProps) {
         background: 'rgba(20,20,40,0.92)',
         border: `1px solid ${celebration.kind === 'extra' ? '#d9b64a' : celebration.kind === 'formed' ? '#7c5cff' : '#2c8a5a'}`,
         boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
-        animation: 'celebrationPop 1s ease-out forwards',
+        animation: 'celebrationPop 2s ease-out forwards',
       }}
     >
       {celebration.text}

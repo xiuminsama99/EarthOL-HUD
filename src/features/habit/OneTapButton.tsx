@@ -36,7 +36,7 @@ export function OneTapButton(props: OneTapButtonProps) {
         zIndex: 10,
       }}
     >
-      {zeroTarget ? (todayChecked ? '今日已坚持 ✓' : '继续坚持（今天也没做它）') : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
+      {zeroTarget ? (todayChecked ? '今日已坚持 ✓' : '戒除完成态 · 今天也没做它') : todayChecked ? '今日已完成 ✓' : '一键打卡（达标）'}
     </button>
   )
 }
