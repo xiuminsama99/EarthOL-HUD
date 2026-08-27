@@ -16,6 +16,10 @@ import {
   STORY_STATUS_COLOR,
 } from './storyFlow'
 import type { StoryStatus } from './storyFlow'
+import { COLORS } from '../../components/ui/theme'
+import { ErrorText } from '../../components/ui/ErrorText'
+import { StatCard } from '../../components/ui/StatCard'
+import { EmptyState } from '../../components/ui/EmptyState'
 
 const overlay: CSSProperties = {
   position: 'fixed',
@@ -139,9 +143,9 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
             flexWrap: 'wrap',
           }}
         >
-          <Stat label="行动天数" value={timeline.totalDays} />
-          <Stat label="打卡次数" value={timeline.totalCheckins} />
-          <Stat label="休息券使用" value={timeline.restUses} />
+          <StatCard label="行动天数" value={timeline.totalDays} valueColor={COLORS.success} />
+          <StatCard label="打卡次数" value={timeline.totalCheckins} valueColor={COLORS.success} />
+          <StatCard label="休息券使用" value={timeline.restUses} valueColor={COLORS.success} />
         </div>
 
         {/* P2-1：本月统计卡 */}
@@ -167,15 +171,11 @@ export function StoryPanel({ businessDate, onChanged, onClose }: StoryPanelProps
         )}
 
         {error && (
-          <p role="alert" style={{ color: '#ff9a9a', fontSize: 13, margin: '0 0 12px' }}>
-            {error}
-          </p>
+          <ErrorText color={COLORS.dangerLight} style={{ margin: '0 0 12px' }}>{error}</ErrorText>
         )}
 
         {timeline.days.length === 0 ? (
-          <div style={{ fontSize: 14, color: '#8b8ba3', textAlign: 'center', padding: '40px 0' }}>
-            还没有行动记录，从今天开始写你的故事吧
-          </div>
+          <EmptyState>还没有行动记录，从今天开始写你的故事吧</EmptyState>
         ) : (
           timeline.days.map((day) => (
             <div key={day.businessDate} style={{ marginBottom: 20 }}>
@@ -290,24 +290,6 @@ const delBtn: CSSProperties = {
   ...smallBtn,
   border: '1px solid #8a2c2c',
   color: '#ff9a9a',
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        minWidth: 90,
-        background: '#1b1b33',
-        borderRadius: 8,
-        padding: '10px 12px',
-        textAlign: 'center',
-      }}
-    >
-      <div style={{ fontSize: 20, fontWeight: 700, color: '#7ee0a8' }}>{value}</div>
-      <div style={{ fontSize: 11, color: '#8b8ba3' }}>{label}</div>
-    </div>
-  )
 }
 
 /** 业务日 YYYY-MM-DD → 「M 月 D 日 周X」（本地解析，仅展示） */

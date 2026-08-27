@@ -8,6 +8,8 @@ import type { HabitState } from '../../engine/types'
 import { FORMED_DAYS } from '../../engine/engine'
 import { habitBadgeLabel, planToday } from './habitFlow'
 import type { Feedback } from './habitShared'
+import { ErrorText } from '../../components/ui/ErrorText'
+import { FeedbackBanner } from '../../components/ui/FeedbackBanner'
 
 interface HabitPanelProps {
   habit: HabitState
@@ -127,19 +129,7 @@ export function HabitPanel(props: HabitPanelProps) {
       {/* R5：年度累计效果（工单 13 起由上方「一年之约」面板呈现年度大数；此处不再重复展示数字） */}
 
       {props.feedback && (
-        <p
-          role="status"
-          style={{
-            padding: '10px 12px',
-            borderRadius: 8,
-            fontSize: 13,
-            margin: '0 0 12px',
-            background: props.feedback.kind === 'ok' ? '#153a2c' : '#3a2c15',
-            color: props.feedback.kind === 'ok' ? '#7ee0a8' : '#ffd27a',
-          }}
-        >
-          {props.feedback.text}
-        </p>
+        <FeedbackBanner ok={props.feedback.kind === 'ok'}>{props.feedback.text}</FeedbackBanner>
       )}
 
       {/* N1：戒除归 0 完成态下隐藏手动打卡区——只保留底部一键打卡（主 CTA）与休息/最低版本
@@ -175,11 +165,7 @@ export function HabitPanel(props: HabitPanelProps) {
             </div>
           </div>
 
-          {props.error && (
-            <p role="alert" style={{ color: '#ff7a7a', fontSize: 13 }}>
-              {props.error}
-            </p>
-          )}
+          {props.error && <ErrorText>{props.error}</ErrorText>}
 
           {/* 【多做了？】折叠：多做 N（储蓄）+ 精确输入，默认收起 */}
           <div style={{ marginBottom: 12 }}>

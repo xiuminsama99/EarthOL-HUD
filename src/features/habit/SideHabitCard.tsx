@@ -21,6 +21,8 @@ import {
 import type { CheckinAction } from './habitFlow'
 import { REJECT_LABEL } from './habitShared'
 import type { Feedback } from './habitShared'
+import { ErrorText } from '../../components/ui/ErrorText'
+import { FeedbackBanner } from '../../components/ui/FeedbackBanner'
 
 interface SideHabitCardProps {
   habit: HabitState
@@ -160,24 +162,10 @@ export function SideHabitCard({ habit, businessDate, schedule, now, onChanged }:
           </div>
 
           {feedback && (
-            <p
-              role="status"
-              style={{
-                padding: '8px 10px',
-                borderRadius: 8,
-                fontSize: 12,
-                margin: '0 0 10px',
-                background: feedback.kind === 'ok' ? '#153a2c' : '#3a2c15',
-                color: feedback.kind === 'ok' ? '#7ee0a8' : '#ffd27a',
-              }}
-            >
-              {feedback.text}
-            </p>
+            <FeedbackBanner compact ok={feedback.kind === 'ok'}>{feedback.text}</FeedbackBanner>
           )}
           {error && (
-            <p role="alert" style={{ color: '#ff7a7a', fontSize: 12, margin: '0 0 10px' }}>
-              {error}
-            </p>
+            <ErrorText fontSize={12} style={{ margin: '0 0 10px' }}>{error}</ErrorText>
           )}
 
           {!zeroTarget && (

@@ -10,6 +10,7 @@ import type { HabitDirection } from '../../engine/types'
 import type { NewHabitInput } from './habitFlow'
 import { isPrefillableHabitDesc } from './habitFlow'
 import { labelStyleForm as labelStyle, inputStyleForm as inputStyle } from '../../components/ui/theme'
+import { ErrorText } from '../../components/ui/ErrorText'
 import { HABIT_TEMPLATES, UNIT_OPTIONS } from './habitTemplates'
 import type { HabitTemplate } from './habitTemplates'
 
@@ -215,11 +216,7 @@ export function CreateHabitForm(props: CreateHabitFormProps) {
         </div>
       </div>
 
-      {error && (
-        <p role="alert" style={{ color: '#ff7a7a', fontSize: 13 }}>
-          {error}
-        </p>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
 
       <button
         type="submit"

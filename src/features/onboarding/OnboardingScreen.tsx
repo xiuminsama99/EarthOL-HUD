@@ -10,6 +10,7 @@ import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { earthStorage } from '../../storage/storage'
 import { panelPage as panel, inputStyle, labelStyle, primaryBtn } from '../../components/ui/theme'
+import { ErrorText } from '../../components/ui/ErrorText'
 import type { AuditScores } from '../../storage/types'
 import {
   AUDIT_SUGGESTIONS,
@@ -445,11 +446,7 @@ function OnboardingScreen({ onCompleted }: OnboardingScreenProps) {
         每天打卡时，系统会替你说：「我以{hasVision ? `${identity}` : '新身份'}的身份完成了今天的习惯，离目标更近了一点点。」
         你什么都不用写。
       </p>
-      {error && (
-        <p role="alert" style={{ color: '#ff7a7a', fontSize: 13 }}>
-          {error}
-        </p>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
       <button type="button" style={primaryBtn} onClick={finish}>
         完成角色设定，开始游戏
       </button>

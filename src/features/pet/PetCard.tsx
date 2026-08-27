@@ -13,6 +13,8 @@ import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { earthStorage } from '../../storage/storage'
 import { moodLabel, petPet } from './petFlow'
+import { ErrorText } from '../../components/ui/ErrorText'
+import { COLORS } from '../../components/ui/theme'
 import { PetArt } from './PetArt'
 
 const card: CSSProperties = {
@@ -106,9 +108,9 @@ export function PetCard({ refreshKey, onChanged }: { refreshKey: number; onChang
           摸摸头
         </button>
         {petError && (
-          <span role="alert" style={{ fontSize: 11, color: '#ff9a9a', marginLeft: 8 }}>
+          <ErrorText inline color={COLORS.dangerLight} fontSize={11} style={{ marginLeft: 8 }}>
             {petError}
-          </span>
+          </ErrorText>
         )}
       </div>
     </div>

@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { earthStorage } from '../../storage/storage'
 import { panelPage as panel, inputStyle, primaryBtn } from '../../components/ui/theme'
+import { ErrorText } from '../../components/ui/ErrorText'
 import { PET_BREEDS, adoptPet } from './petFlow'
 import { PetArt } from './PetArt'
 
@@ -100,11 +101,7 @@ function AdoptPetScreen({ onAdopted }: AdoptPetScreenProps) {
         />
       </div>
 
-      {error && (
-        <p role="alert" style={{ color: '#ff7a7a', fontSize: 13, margin: '0 0 10px' }}>
-          {error}
-        </p>
-      )}
+      {error && <ErrorText style={{ margin: '0 0 10px' }}>{error}</ErrorText>}
 
       <button type="button" onClick={adopt} style={primaryBtn}>
         领养它，开始游戏

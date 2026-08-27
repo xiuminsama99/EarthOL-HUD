@@ -39,6 +39,7 @@ import {
 import type { TodayPlan } from './habitFlow'
 import type { CheckinAction, NewHabitInput } from './habitFlow'
 import { CreateHabitForm } from './CreateHabitForm'
+import { EmptyState } from '../../components/ui/EmptyState'
 import { AnnualGoalPanel } from './AnnualGoalPanel'
 import { computeScaleData } from '../scale/scaleFlow'
 import { ScalePanel } from '../scale/ScalePanel'
@@ -582,16 +583,7 @@ function HabitScreen() {
       />
 
       {!businessDate ? (
-        <div
-          style={{
-            padding: '40px 0',
-            textAlign: 'center',
-            color: '#8b8ba3',
-            fontSize: 14,
-          }}
-        >
-          解析时间中…
-        </div>
+        <EmptyState>解析时间中…</EmptyState>
       ) : !habit || !plan ? (
         // 初次（无任何习惯）：建第一个习惯
         <CreateHabitForm

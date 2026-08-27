@@ -9,8 +9,8 @@
  *
  * 只读组件：全部数据由调用方经 computeScaleData 计算后传入。
  */
-import type { CSSProperties } from 'react'
-import { panelCard as panel } from '../../components/ui/theme'
+import { panelCard as panel, COLORS } from '../../components/ui/theme'
+import { StatCard } from '../../components/ui/StatCard'
 import { PetArt } from '../pet/PetArt'
 import type { ScaleData } from './scaleFlow'
 
@@ -22,14 +22,6 @@ interface ScalePanelProps {
   identity: string | null
   /** 正愿景展开描述（右盘文案用） */
   vision: string | null
-}
-
-const statBox: CSSProperties = {
-  flex: 1,
-  background: '#141428',
-  borderRadius: 8,
-  padding: '8px 10px',
-  textAlign: 'center',
 }
 
 /** 天平 SVG：横杆 + 两盘绕支点旋转（tiltDeg > 0 左沉） */
@@ -106,26 +98,31 @@ export function ScalePanel({ scale, petBreed, petName, identity, vision }: Scale
 
       {/* 累积数字 */}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <div style={statBox}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>
-            {scale.actionDays}
-            <span style={{ fontSize: 11, color: '#8b8ba3' }}> 天</span>
-          </div>
-          <div style={{ fontSize: 11, color: '#8b8ba3' }}>行动天数</div>
-        </div>
-        <div style={statBox}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>
-            {scale.totalAmount}
-            <span style={{ fontSize: 11, color: '#8b8ba3' }}> {scale.unit}</span>
-          </div>
-          <div style={{ fontSize: 11, color: '#8b8ba3' }}>累计总量</div>
-        </div>
-        <div style={statBox}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>
-            {scale.weeklyActionRate === null ? '—' : `${scale.weeklyActionRate}%`}
-          </div>
-          <div style={{ fontSize: 11, color: '#8b8ba3' }}>最近 7 天行动率</div>
-        </div>
+        <StatCard
+          compact
+          label="行动天数"
+          value={
+            <>
+              {scale.actionDays}
+              <span style={{ fontSize: 11, color: COLORS.textMuted }}> 天</span>
+            </>
+          }
+        />
+        <StatCard
+          compact
+          label="累计总量"
+          value={
+            <>
+              {scale.totalAmount}
+              <span style={{ fontSize: 11, color: COLORS.textMuted }}> {scale.unit}</span>
+            </>
+          }
+        />
+        <StatCard
+          compact
+          label="最近 7 天行动率"
+          value={scale.weeklyActionRate === null ? '—' : `${scale.weeklyActionRate}%`}
+        />
       </div>
 
       {/* 最近一条打卡语（身份一致性的证据） */}
